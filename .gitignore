@@ -1,0 +1,10 @@
+# Build output and fetched dependencies
+/build/
+/dist/
+/.deps/
+# Google's models, fetched and converted at build (scripts/fetch_models.py)
+/models/
+__pycache__/
+*.pyc
+.vs/
+CMakeUserPresets.json

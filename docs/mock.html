@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rely-A-Cam-Gestures - mock round 1</title>
+<style>
+:root{
+  /* same tokens as Rely-A-Cam's dock (OBS 31.1.2 Yami), so the editor reads as part of it */
+  --grey1:#5B6273;--grey2:#4E5566;--grey3:#464B59;--grey4:#3C404D;--grey5:#323540;--grey6:#272A33;--grey7:#1D1F26;--grey8:#13141A;
+  --blue1:#718CDC;--blue2:#476BD7;--blue3:#284CB8;--red3:#C01C37;--green3:#25A231;--yellow2:#E5AF24;
+  --text:#fff;--text-light:#D6D6D6;--muted:#999;--radius:4px;--page:#0b0c10;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--page);color:var(--text);font:13px/1.35 "Segoe UI",system-ui,sans-serif}
+button,select,input{font:inherit;color:inherit}
+.topbar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:9px 16px;background:#15161c;border-bottom:1px solid #2a2c35;position:sticky;top:0;z-index:50}
+.topbar h1{font-size:14px;margin:0 6px 0 0}
+.topbar h1 small{color:var(--muted);font-weight:400;margin-left:6px}
+.seg{display:inline-flex;border:1px solid var(--grey4);border-radius:var(--radius);overflow:hidden}
+.seg button{background:var(--grey6);border:0;padding:4px 10px;cursor:pointer;color:var(--text-light)}
+.seg button+button{border-left:1px solid var(--grey4)}
+.seg button.on{background:var(--blue3);color:#fff}
+.sim{background:#2b2135;border:1px solid #6a4c8c;border-radius:12px;padding:3px 10px;cursor:pointer;color:#e6d6ff}
+.sim.on{background:#6a4c8c;color:#fff}
+.muted{color:var(--muted)}
+main{padding:16px;display:flex;gap:18px;align-items:flex-start}
+.win{width:1160px;background:var(--grey7);border:1px solid #000;border-radius:6px;overflow:hidden;box-shadow:0 10px 30px #0008;flex:none}
+.wtitle{height:30px;display:flex;align-items:center;gap:8px;padding:0 10px;background:#101116;color:var(--text-light);font-size:12px}
+.wtitle .wc{margin-left:auto;display:flex;gap:18px;color:var(--muted)}
+.tools{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--grey5);background:var(--grey6)}
+.btn{background:var(--grey4);border:1px solid var(--grey4);border-radius:var(--radius);padding:3px 9px;cursor:pointer;color:var(--text)}
+.btn:hover{background:var(--grey3);border-color:var(--grey1)}
+.btn.on{background:var(--blue3);border-color:var(--blue2)}
+.btn.warn{background:#5a2030;border-color:var(--red3)}
+.btn[disabled]{opacity:.45;cursor:default}
+.obsel{background:var(--grey4);border:1px solid var(--grey1);border-radius:var(--radius);padding:2px 6px}
+.sw{display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+.sw i{width:30px;height:16px;border-radius:8px;background:var(--grey3);position:relative;transition:background .15s}
+.sw i::after{content:"";position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;background:#fff;transition:left .15s}
+.sw.on i{background:var(--blue2)}
+.sw.on i::after{left:16px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-light);background:var(--grey5);border-radius:10px;padding:2px 9px;white-space:nowrap}
+.chip.ok::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green3)}
+.chip.rec{background:#5a2030;color:#fff}
+.spacer{flex:1}
+.body{display:grid;grid-template-columns:1fr 360px;height:640px}
+.left{padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.banner{font-size:12px;color:#cfe0ff;background:#1d2a4d;border:1px solid var(--blue3);border-radius:var(--radius);padding:5px 9px}
+.pv{position:relative;aspect-ratio:16/9;background:#000;border-radius:3px;overflow:hidden}
+.pv svg.scene{position:absolute;inset:0;width:100%;height:100%}
+.pv .ov{position:absolute;inset:0;pointer-events:none}
+.pv svg.ov{width:100%;height:100%}
+.gridov i{position:absolute;top:0;bottom:0;width:1px;background:#ffffff80}
+.gridov i.h{left:0;right:0;bottom:auto;width:auto;height:1px}
+.meme{position:absolute;display:grid;place-items:center;text-align:center;font-weight:800;color:#fff;border-radius:14px;text-shadow:0 2px 6px #000a;transition:opacity .1s}
+.meme small{display:block;font-weight:500;font-size:11px;opacity:.85}
+.ring{position:absolute;width:46px;height:46px;margin:-23px 0 0 -23px}
+.gname{position:absolute;transform:translate(-50%,0);font-size:12px;font-weight:600;background:#000b;padding:1px 8px;border-radius:10px;white-space:nowrap}
+.gname.amber{color:var(--yellow2)}
+.big{position:absolute;inset:0;display:grid;place-items:center;font-size:96px;font-weight:800;color:#fff;text-shadow:0 4px 20px #000}
+.holdbar{position:absolute;left:30%;right:30%;bottom:16px;height:8px;border-radius:4px;background:#0009;overflow:hidden}
+.holdbar b{display:block;height:100%;background:var(--blue2)}
+.holdtxt{position:absolute;left:0;right:0;bottom:30px;text-align:center;font-weight:600;text-shadow:0 1px 4px #000}
+.toast{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:#fff;color:#111;border-radius:14px;padding:5px 14px;font-size:12px;opacity:0;transition:opacity .2s;white-space:nowrap}
+.toast.show{opacity:1}
+.under{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}
+.side{background:var(--grey6);border-left:1px solid var(--grey5);display:flex;flex-direction:column;min-height:0}
+.tabs{display:flex;border-bottom:1px solid var(--grey5)}
+.tabs button{flex:1;background:none;border:0;padding:8px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}
+.tabs button.on{color:#fff;border-bottom-color:var(--blue2)}
+.scroll{flex:1;overflow:auto;padding:8px;display:flex;flex-direction:column;gap:6px}
+.grp{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-top:6px;cursor:pointer;user-select:none}
+.grp b{color:var(--text-light)}
+.row{display:grid;grid-template-columns:26px 1fr auto;align-items:center;gap:8px;padding:5px 7px;border-radius:var(--radius);background:var(--grey5);cursor:pointer}
+.row:hover{background:var(--grey4)}
+.row .ic{font-size:16px;text-align:center}
+.row .t{display:flex;flex-direction:column;min-width:0}
+.row .t span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .t small{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .t small.need{color:#c49a3a}
+.row.off{opacity:.55}
+.foot{display:flex;gap:6px;padding:8px;border-top:1px solid var(--grey5)}
+.ed{display:flex;flex-direction:column;gap:9px}
+.ed h3{margin:2px 0 0;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.ed .line{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ed input[type=text]{background:var(--grey4);border:1px solid var(--grey1);border-radius:var(--radius);padding:3px 7px;flex:1}
+.takes{display:flex;gap:5px}
+.take{width:44px;height:34px;border-radius:3px;background:linear-gradient(135deg,#3a4152,#262a33);display:grid;place-items:center;font-size:11px;color:var(--text-light);border:1px solid var(--grey3)}
+.pick{display:flex;justify-content:space-between;align-items:center;gap:6px;background:var(--grey4);border:1px solid var(--grey1);border-radius:var(--radius);padding:3px 8px;cursor:pointer;flex:1;min-width:0}
+.pick span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meter{position:relative;height:8px;border-radius:4px;background:var(--grey4);overflow:hidden;flex:1}
+.meter b{position:absolute;left:0;top:0;bottom:0;background:var(--green3)}
+.meter i{position:absolute;top:-2px;bottom:-2px;width:2px;background:#fff}
+.tick{display:inline-flex;align-items:center;gap:5px;cursor:pointer}
+.tick input{accent-color:var(--blue2)}
+.result{font-size:12px;background:var(--grey7);border-radius:var(--radius);padding:5px 8px}
+.mm{display:grid;grid-template-columns:52px 1fr;gap:8px;padding:7px;border-radius:var(--radius);background:var(--grey5)}
+.mm .th{width:52px;height:52px;border-radius:6px;display:grid;place-items:center;font-weight:800;font-size:11px;color:#fff;text-shadow:0 1px 3px #000}
+.mm .meta{display:flex;flex-direction:column;gap:4px;min-width:0}
+.mm .meta .l1{display:flex;gap:6px;align-items:center}
+.mm .meta .l1 b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mm .meta small{color:var(--muted)}
+.mm .meta select{flex:1;min-width:0}
+.mm .meta input[type=range]{width:56px;flex:none}
+.scroll{overflow-x:hidden}
+.qmenu .note{padding:4px 10px 3px 24px;color:var(--muted);font-size:11px;max-width:260px;white-space:normal}
+.qmenu{position:fixed;z-index:100;min-width:210px;background:var(--grey6);border:1px solid var(--grey3);border-radius:4px;box-shadow:0 8px 24px #000c;padding:4px 0;font-size:12px}
+.qmenu .mi{display:grid;grid-template-columns:18px 1fr 14px;align-items:center;padding:4px 10px 4px 6px;white-space:nowrap;cursor:default}
+.qmenu .mi:hover,.qmenu .mi.open{background:var(--blue3)}
+.qmenu .mi .ck{color:var(--blue1);text-align:center}
+.qmenu .mi:hover .ck{color:#fff}
+.qmenu .mi .ar{color:var(--muted);text-align:right}
+.qmenu .hdr{padding:5px 10px 2px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.qmenu .sep{height:1px;background:var(--grey4);margin:4px 0}
+.qdlg{position:fixed;inset:0;z-index:120;background:#0009;display:grid;place-items:center}
+.qdlg .box{width:500px;background:var(--grey6);border:1px solid #000;border-radius:6px;box-shadow:0 16px 40px #000c;padding:14px 16px;display:flex;flex-direction:column;gap:9px}
+.qdlg h3{margin:0;font-size:14px}
+.qdlg h4{margin:4px 0 0;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.qdlg .rowx{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.qdlg .end{display:flex;justify-content:flex-end;gap:6px;margin-top:4px}
+.caption{width:560px;padding:12px 16px;background:#14151b;border:1px solid #24262e;border-radius:8px;color:var(--text-light)}
+.caption h2{font-size:13px;margin:0 0 6px;color:#fff}
+.caption ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.caption b{color:#fff}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <h1>Rely-A-Cam-Gestures<small>mock, round 1</small></h1>
+  <span class="muted">Situation</span>
+  <span class="seg" id="sitSeg"><button data-s="own" class="on">On its own</button><button data-s="obs">On its own, OBS open</button><button data-s="rac">Inside Rely-A-Cam</button></span>
+  <span class="muted">Simulate (click to hold, click again to let go)</span>
+  <button class="sim" data-hold="heart">Heart hands</button>
+  <button class="sim" data-hold="peace">Peace sign</button>
+  <button class="sim" data-hold="thumbs">Thumbs up (confirm)</button>
+  <button class="sim" data-hold="palms">Both palms (stop)</button>
+</header>
+<main>
+  <section class="win">
+    <div class="wtitle"><span id="wtitle">Rely-A-Cam-Gestures</span><span class="wc"><span>&#8211;</span><span>&#9633;</span><span>&#215;</span></span></div>
+    <div class="tools" id="tools"></div>
+    <div class="body">
+      <div class="left" id="left"></div>
+      <aside class="side" id="side"></aside>
+    </div>
+  </section>
+  <section class="caption">
+    <h2>Round 1, 2026-11-27</h2>
+    <ul>
+      <li><b>One program, three situations</b> (top bar). <b>On its own</b>: your webcam, with its own virtual camera and OBS Virtual Camera as outputs. <b>OBS open</b>: OBS actions show up, found through OBS's built-in WebSocket. <b>Inside Rely-A-Cam</b>: the dock's "Open editor..." opens this window, the picture is the phone, and the phone and OBS actions show up.</li>
+      <li><b>Actions follow the situation.</b> Open a gesture, then Action: only what this situation can do is listed. Switch to "On its own" and the peace sign's "Start/stop recording" stays on it, greyed out with "needs OBS". Nothing is deleted.</li>
+      <li><b>Try it.</b> Hold "Heart hands": the ring fills, the skeleton and name show, and the meme sits on your head while you hold (itsgiving's way), staying ⅓ s after you let go. Hold "Peace sign" on OBS open: the ring turns amber and asks for the confirm sign. Also hold "Thumbs up" and recording starts. Peace again stops it. "Both palms" is the stop sign.</li>
+      <li><b>Record a gesture.</b> + Record gesture (or Record take in a gesture) runs 3-2-1, then hold for 2 s. Test shows a live match %, and Misfire check runs 10 s of normal movement (3 s in this mock) and counts false fires.</li>
+      <li><b>Memes tab</b>: pictures, GIFs and video, sound and volume, placement (on my head, full frame, fixed spot), and "Import from itsgiving folder..." for your own clone's pictures (not shipped).</li>
+      <li><b>&#8943; menu</b>: Overlays (grid and detection, each for the preview and the output separately), Calibrate neutral face, Settings (outputs, meme sound, confirm and stop signs, OBS WebSocket, start with Windows).</li>
+      <li>Colours are Rely-A-Cam's dock tokens (OBS Yami), so the editor reads as part of Rely-A-Cam when the dock opens it.</li>
+    </ul>
+  </section>
+</main>
+<script>
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const params = new URLSearchParams(location.search);
+
+/* ---------------- situation + actions ---------------- */
+let sit = params.get("sit") || "own";          // own | obs | rac
+const has = need => !need || (need === "obs" ? sit !== "own" : sit === "rac");
+const NEEDTXT = { obs: "needs OBS", rac: "needs Rely-A-Cam" };
+const MEMES = [
+  { id: "heart", name: "heart.gif", kind: "GIF", sound: false, vol: 80, place: "head", color: "#d63a7a", word: "HEART" },
+  { id: "clown", name: "clown.webm", kind: "WebM, alpha", sound: true, vol: 65, place: "head", color: "#d98a1c", word: "CLOWN" },
+  { id: "bruh", name: "bruh.mp4", kind: "MP4", sound: true, vol: 90, place: "full", color: "#4a63c9", word: "BRUH" },
+  { id: "timeout", name: "time_out.png", kind: "PNG", sound: false, vol: 80, place: "spot", color: "#2f8f74", word: "TIME OUT" },
+];
+const actionGroups = () => [
+  { g: "Meme", items: MEMES.map(m => ({ id: "meme:" + m.id, label: `Meme: ${m.name}${m.sound ? " ♪" : ""}` })) },
+  { g: "Camera", items: [
+    { id: "cam.off", label: sit === "rac" ? "Camera off (phone: mic only)" : "Camera off (output goes dark)" },
+    { id: "zoom.in", label: "Zoom in (next preset)" }, { id: "zoom.out", label: "Zoom out (previous preset)" },
+    { id: "zoom.box", label: "Two pinches draw a box" }, { id: "zoom.hold", label: "Zoom on what I hold" },
+    { id: "follow.face", label: "Follow face" }, { id: "snap", label: "Snapshot" }] },
+  { g: "Phone", need: "rac", items: [{ id: "mic", label: "Mic on/off" }, { id: "miconly", label: "Mic only" }, { id: "torch", label: "Torch" }, { id: "switch", label: "Switch front/back camera" }] },
+  { g: "OBS", need: "obs", items: [{ id: "obs.scene", label: "Switch scene", sub: ["Just chatting", "Gaming", "BRB"] }, { id: "obs.rec", label: "Start/stop recording" }, { id: "obs.stream", label: "Start/stop streaming" }, { id: "obs.hotkey", label: "Any OBS hotkey", sub: ["Mute Desktop Audio", "Show/hide: Webcam frame", "Screenshot output"] }] },
+  { g: "Overlays", items: [{ id: "grid", label: "Grid on/off" }, { id: "det", label: "Detection overlay on/off" }] },
+  { g: "Gestures", items: [{ id: "pause", label: "Pause gestures" }, { id: "undo", label: "Undo last action" }] },
+];
+function actionInfo(id) {
+  for (const g of actionGroups()) for (const it of g.items) {
+    if (it.id === id.split("|")[0]) return { label: it.label + (id.includes("|") ? ": " + id.split("|")[1] : ""), need: g.need };
+  }
+  return { label: "None", need: null };
+}
+
+/* ---------------- library ---------------- */
+const READY = [["time_out", "Time out", "both hands make a T"], ["heart", "Heart hands", "both hands"], ["cover_nose", "Cover nose", "both hands over nose and mouth"],
+  ["crashing_out", "Crashing out", "hands on head, mouth open"], ["dance", "Dance", "hands up behind the head"], ["nose_closed", "Nose closed", "nose pinched"],
+  ["flirty", "Flirty", "fingertip on the lips"], ["hand_up", "Hand up", "open palm beside the head"], ["tongue_out", "Tongue out", "face"],
+  ["open_mouth", "Open mouth", "face"], ["disgusted", "Disgusted", "face"], ["talking_to_wall", "Talking to the wall", "hands gesturing away"],
+  ["suspicious", "Suspicious", "head turned, squinting"], ["spin", "Spin", "leave the frame"]];
+const SIGNS = ["Thumbs up", "Thumbs down", "Open palm", "Fist", "Victory", "Pointing up", "I love you"];
+const mk = (o) => Object.assign({ on: true, action: "", ends: "held", secs: 3, stop: true, confirm: false, sens: 60, parts: { lh: true, rh: true, face: false, body: false }, takes: 0, sim: null, kind: "ready" }, o);
+const lib = [
+  ...READY.map(([k, n, how]) => mk({ id: k, name: n, how, icon: "✨", action: k === "heart" ? "meme:heart" : k === "time_out" ? "meme:timeout" : k === "crashing_out" ? "meme:bruh" : "", sim: k === "heart" ? "heart" : null, parts: { lh: true, rh: true, face: !["heart", "time_out"].includes(k), body: k === "dance" } })),
+  ...SIGNS.map(s => mk({ id: s, name: s, how: "Google's hand sign", icon: "✋", kind: "sign", on: s === "Thumbs up", action: "", sim: s === "Thumbs up" ? "thumbs" : s === "Open palm" ? null : null, note: s === "Thumbs up" ? "your confirm sign" : "" })),
+  mk({ id: "peace", name: "Peace, record", how: "your own, 3 takes", icon: "✌", kind: "mine", action: "obs.rec", ends: "again", confirm: true, takes: 3, sim: "peace", parts: { lh: false, rh: true, face: false, body: false } }),
+  mk({ id: "box", name: "Box", how: "your own, 2 takes", icon: "\u{1F90F}", kind: "mine", action: "zoom.box", ends: "again", takes: 2 }),
+  mk({ id: "show", name: "Show this", how: "your own, 2 takes", icon: "\u{1F90C}", kind: "mine", action: "zoom.hold", ends: "again", takes: 2 }),
+  mk({ id: "zin", name: "Zoom in", how: "your own, 4 takes", icon: "☝", kind: "mine", action: "zoom.in", ends: "again", takes: 4 }),
+];
+const open = { ready: false, sign: false, mine: true };
+let tab = params.get("tab") || "gestures";
+let editing = params.get("edit") ? lib.find(g => g.id === params.get("edit")) : null;
+let gestOn = true, grid = { pv: false, out: false }, det = { pv: true, out: false };
+let recording = false, camOff = false, lastAction = null;
+
+/* ---------------- simulation state ---------------- */
+const held = new Set((params.get("hold") || "").split(",").filter(Boolean));
+const arm = {};                 // gesture id -> ms held
+const showing = {};             // meme id -> until (ms) ; Infinity while held
+let rec = null;                 // { phase: count|hold, t0, g }
+let test = null;                // { mode: live|mis, t0, fires }
+let toastAt = -1e9, toastMsg = "";
+const say = m => { toastMsg = m; toastAt = performance.now(); };
+
+/* ---------------- menus + dialog ---------------- */
+const menus = [];
+function closeMenus(from = 0) { while (menus.length > from) menus.pop().remove(); }
+function openMenu(items, x, y, depth = 0) {
+  closeMenus(depth);
+  const m = document.createElement("div"); m.className = "qmenu";
+  for (const it of items) {
+    if (it.sep) { m.insertAdjacentHTML("beforeend", `<div class="sep"></div>`); continue; }
+    if (it.hdr) { m.insertAdjacentHTML("beforeend", `<div class="hdr">${esc(it.hdr)}</div>`); continue; }
+    if (it.note) { m.insertAdjacentHTML("beforeend", `<div class="note">${esc(it.note)}</div>`); continue; }
+    const row = document.createElement("div"); row.className = "mi";
+    row.innerHTML = `<span class="ck">${it.check ? "&#10003;" : ""}</span><span>${esc(it.label)}</span><span class="ar">${it.sub ? "&#9656;" : ""}</span>`;
+    row.addEventListener("mouseenter", () => {
+      m.querySelectorAll(".mi.open").forEach(o => o.classList.remove("open"));
+      if (it.sub) { row.classList.add("open"); const r = row.getBoundingClientRect(); openMenu(it.sub, r.right - 2, r.top - 5, depth + 1); } else closeMenus(depth + 1);
+    });
+    row.addEventListener("click", e => { e.stopPropagation(); if (it.sub) return; closeMenus(); it.act?.(); render(); });
+    m.appendChild(row);
+  }
+  document.body.appendChild(m);
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.max(4, Math.min(x, innerWidth - r.width - 4)) + "px";
+  m.style.top = Math.max(4, Math.min(y, innerHeight - r.height - 4)) + "px";
+  menus.push(m);
+}
+document.addEventListener("pointerdown", e => { if (!e.target.closest(".qmenu")) closeMenus(); });
+const closeDlg = () => $("#qdlg")?.remove();
+document.addEventListener("keydown", e => { if (e.key === "Escape") { closeMenus(); closeDlg(); } });
+function settingsDlg() {
+  closeDlg();
+  const d = document.createElement("div"); d.className = "qdlg"; d.id = "qdlg";
+  d.innerHTML = `<div class="box"><h3>Settings</h3>
+    <h4>Outputs (on its own)</h4>
+    <label class="tick"><input type="checkbox" checked> Own virtual camera, "Rely-A-Cam-Gestures Camera" <span class="muted">(Windows 11)</span></label>
+    <label class="tick"><input type="checkbox" checked> OBS Virtual Camera <span class="muted">(OBS installed; it doesn't need to be running)</span></label>
+    <div class="muted">Both were ticked in the installer; untick one here any time.</div>
+    <h4>Meme sound (on its own)</h4>
+    <div class="rowx"><label class="tick"><input type="radio" name="snd" checked> To my speakers</label>
+      <label class="tick"><input type="radio" name="snd"> Into calls, mixed with my mic (VB-Cable)</label></div>
+    <h4>Signs</h4>
+    <div class="rowx"><span class="muted">Confirm sign</span><select class="obsel"><option>Thumbs up</option><option>Fist</option><option>Open palm</option><option>I love you</option></select>
+      <span class="muted">Stop sign</span><select class="obsel"><option>Both palms open, 1 s</option><option>Crossed arms, 1 s</option></select></div>
+    <div class="rowx"><button class="btn">Calibrate neutral face (7 s)...</button><span class="muted">last done today, 34 frames</span></div>
+    <h4>OBS</h4>
+    <div class="rowx">${sit === "own" ? `<span class="chip">OBS not found</span><span class="muted">Turn on Tools &gt; WebSocket Server Settings in OBS</span>` : sit === "obs" ? `<span class="chip ok">OBS WebSocket found on localhost:4455</span><input type="password" class="obsel" value="********" style="width:110px">` : `<span class="chip ok">Attached through Rely-A-Cam: no WebSocket needed</span>`}</div>
+    <label class="tick"><input type="checkbox"> Start with Windows (in the tray)</label>
+    <div class="end"><button class="btn on" data-x>Done</button></div></div>`;
+  d.addEventListener("click", e => { if (e.target.closest("[data-x]") || e.target === d) closeDlg(); });
+  document.body.appendChild(d);
+}
+function moreMenu(x, y) {
+  const places = o => [["pv", "Preview"], ["out", "Output"]].map(([k, l]) => ({ label: l, check: o[k], act: () => { o[k] = !o[k]; } }));
+  openMenu([
+    { label: "Overlays", sub: [{ label: "Grid", sub: places(grid) }, { label: "Detection", sub: places(det) }] },
+    { label: "Calibrate neutral face...", act: () => say("Calibrating: keep a neutral face for 7 s") },
+    { label: "Import from itsgiving folder...", act: () => say("Copied 14 pictures from your itsgiving clone, matched by name") },
+    { sep: 1 },
+    { label: "Settings...", act: settingsDlg },
+    { label: "About" },
+  ], x, y);
+}
+
+/* ---------------- scene (stand-in for the camera) ---------------- */
+const HEAD = { x: 50, y: 34, h: 30 };   // % of the frame: where the face is, and its height
+const SCENE = `<svg class="scene" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+<rect width="1600" height="900" fill="#39404e"/><rect x="180" y="120" width="300" height="200" fill="#262a33" stroke="#8a7350" stroke-width="10"/>
+<path d="M190 310 L280 220 L330 270 L380 230 L470 310Z" fill="#5d7a8c"/><rect x="1200" y="0" width="40" height="900" fill="#30353f"/>
+<path d="M480 900 Q510 640 800 615 Q1090 640 1120 900Z" fill="#7a3b4e"/><rect x="752" y="520" width="96" height="110" fill="#c98f6b"/>
+<ellipse cx="800" cy="300" rx="120" ry="148" fill="#d9a07a"/>
+<path d="M680 290 Q676 150 800 145 Q930 150 922 290 Q890 205 800 202 Q710 205 680 290Z" fill="#1d1a18"/>
+<ellipse cx="755" cy="305" rx="15" ry="9" fill="#fff"/><circle cx="755" cy="305" r="6" fill="#2a1d14"/>
+<ellipse cx="845" cy="305" rx="15" ry="9" fill="#fff"/><circle cx="845" cy="305" r="6" fill="#2a1d14"/>
+<path d="M735 282 q20 -9 40 0 M825 282 q20 -9 40 0" stroke="#1d1a18" stroke-width="6" fill="none" stroke-linecap="round"/>
+<path d="M800 315 q-10 34 2 40" stroke="#b57a58" stroke-width="5" fill="none"/><path d="M765 380 q35 20 70 0" stroke="#7a3b2e" stroke-width="6" fill="none" stroke-linecap="round"/>
+</svg>`;
+/* schematic hands: a palm point and five finger chains, in % of the frame */
+const HANDS = {
+  heart: [[[44, 66], [[41, 60], [40, 55], [42, 51]], [[44, 58], [46, 52], [49, 50]], [[45, 59], [47, 54], [49, 52]], [[46, 61], [48, 57]], [[47, 63], [49, 60]]],
+          [[56, 66], [[59, 60], [60, 55], [58, 51]], [[56, 58], [54, 52], [51, 50]], [[55, 59], [53, 54], [51, 52]], [[54, 61], [52, 57]], [[53, 63], [51, 60]]]],
+  peace: [[[70, 62], [[67, 58], [65, 55]], [[69, 54], [68, 46], [67, 40]], [[72, 54], [73, 46], [75, 40]], [[73, 57], [72, 60]], [[74, 59], [73, 62]]]],
+  thumbs: [[[28, 64], [[29, 57], [29, 51], [29, 46]], [[26, 61], [24, 62]], [[26, 63], [24, 64]], [[26, 65], [24, 66]], [[27, 67], [25, 68]]]],
+  palms: [[[24, 55], [[21, 52]], [[22, 46], [22, 40]], [[24, 45], [24, 39]], [[26, 46], [26, 40]], [[27, 48], [28, 43]]],
+          [[76, 55], [[79, 52]], [[78, 46], [78, 40]], [[76, 45], [76, 39]], [[74, 46], [74, 40]], [[73, 48], [72, 43]]]],
+};
+function handsSVG(keys) {
+  let s = "";
+  for (const k of keys) for (const [palm, ...fingers] of HANDS[k] || []) {
+    for (const f of fingers) {
+      const pts = [palm, ...f].map(p => p.join(",")).join(" ");
+      s += `<polyline points="${pts}" fill="none" stroke="#5fd06c" stroke-width=".35" vector-effect="non-scaling-stroke" style="stroke-width:2.5px"/>`;
+      for (const p of f) s += `<circle cx="${p[0]}" cy="${p[1]}" r=".45" fill="#fff"/>`;
+    }
+    s += `<circle cx="${palm[0]}" cy="${palm[1]}" r=".7" fill="#5fd06c"/>`;
+  }
+  return `<svg class="ov" viewBox="0 0 100 100" preserveAspectRatio="none">${s}</svg>`;
+}
+function ringSVG(frac, amber) {
+  const c = 2 * Math.PI * 19;
+  return `<svg viewBox="0 0 46 46"><circle cx="23" cy="23" r="19" fill="none" stroke="#0008" stroke-width="5"/>
+    <circle cx="23" cy="23" r="19" fill="none" stroke="${amber ? "#E5AF24" : "#5fd06c"}" stroke-width="5" stroke-dasharray="${(c * Math.min(1, frac)).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 23 23)" stroke-linecap="round"/></svg>`;
+}
+
+/* ---------------- render ---------------- */
+function render() {
+  $("#wtitle").textContent = sit === "rac" ? "Rely-A-Cam-Gestures: editing for OBS, phone nova 10" : "Rely-A-Cam-Gestures";
+  document.querySelectorAll("#sitSeg button").forEach(b => b.classList.toggle("on", b.dataset.s === sit));
+  document.querySelectorAll("[data-hold]").forEach(b => b.classList.toggle("on", held.has(b.dataset.hold)));
+  $("#tools").innerHTML = `
+    <span class="sw ${gestOn ? "on" : ""}" data-t="gest"><i></i>Gestures ${gestOn ? "on" : "paused"}</span>
+    <span class="muted" style="margin-left:6px">Camera</span>
+    ${sit === "rac" ? `<span class="chip ok">Phone: nova 10 (through Rely-A-Cam)</span>` : `<select class="obsel"><option>Logitech C920</option><option>Integrated Camera</option></select>`}
+    ${sit === "rac" ? "" : `<span class="chip ok" title="Settings > Outputs">Virtual camera + OBS Virtual Camera</span>`}
+    ${sit === "obs" ? `<span class="chip ok">OBS found</span>` : ""}
+    ${recording ? `<span class="chip rec">&#9679; REC (OBS)</span>` : ""}
+    <span class="spacer"></span>
+    <button class="btn" data-t="undo" ${lastAction ? "" : "disabled"} title="Undo the last gesture's action">Undo${lastAction ? ": " + esc(lastAction) : ""}</button>
+    <button class="btn" data-t="more" title="Overlays, calibrate, import, settings">&#8943;</button>`;
+  $("#left").innerHTML = `
+    ${sit === "rac" ? `<div class="banner">Attached to Rely-A-Cam in OBS: actions run on the phone and in OBS. Closing this window keeps gestures running.</div>` : ""}
+    <div class="pv" id="pv">${SCENE}<div class="ov" id="ovl"></div><div class="toast" id="toast"></div></div>
+    <div class="under"><span>Preview shows what the output gets${det.pv ? ", plus the detection overlay (preview only)" : ""}.</span><span class="spacer"></span><span>15 fps detection &#183; 640x360 &#183; GPU (DirectML)</span></div>`;
+  $("#side").innerHTML = editing ? editorHTML(editing) : `
+    <div class="tabs"><button data-tab="gestures" class="${tab === "gestures" ? "on" : ""}">Gestures</button><button data-tab="memes" class="${tab === "memes" ? "on" : ""}">Memes</button></div>
+    <div class="scroll">${tab === "gestures" ? libraryHTML() : memesHTML()}</div>
+    <div class="foot">${tab === "gestures"
+      ? `<button class="btn on" data-t="newg" style="flex:1">+ Record gesture</button>`
+      : `<button class="btn on" data-t="addm" style="flex:1">+ Add files...</button><button class="btn" data-t="import">Import from itsgiving...</button>`}</div>`;
+  paint();
+}
+function gRow(g) {
+  const a = actionInfo(g.action), ok = has(a.need);
+  const sub = g.action ? `<small class="${ok ? "" : "need"}">&#8594; ${esc(a.label)}${ok ? "" : " (" + NEEDTXT[a.need] + ")"}${g.confirm ? " &#183; needs confirm" : ""}</small>` : `<small>${g.note ? esc(g.note) : "no action yet"}</small>`;
+  return `<div class="row ${g.on ? "" : "off"}" data-g="${esc(g.id)}"><span class="ic">${g.icon}</span><span class="t"><span>${esc(g.name)}</span>${sub}</span>
+    <span class="sw ${g.on ? "on" : ""}" data-gon="${esc(g.id)}" title="On/off"><i></i></span></div>`;
+}
+function libraryHTML() {
+  const grp = (k, title, n) => `<div class="grp" data-open="${k}">${open[k] ? "&#9662;" : "&#9656;"} <b>${title}</b> (${n})</div>`;
+  const of = k => lib.filter(g => g.kind === k);
+  return grp("mine", "Mine", of("mine").length) + (open.mine ? of("mine").map(gRow).join("") : "")
+    + grp("ready", "itsgiving's reactions", of("ready").length) + (open.ready ? of("ready").map(gRow).join("") : "")
+    + grp("sign", "Google's hand signs", of("sign").length) + (open.sign ? of("sign").map(gRow).join("") : "");
+}
+function memesHTML() {
+  return MEMES.map(m => `<div class="mm"><div class="th" style="background:${m.color}">${m.word}</div><div class="meta">
+    <div class="l1"><b>${esc(m.name)}</b><span class="chip">${m.kind}</span></div>
+    <div class="l1"><select class="obsel" data-place="${m.id}"><option value="head" ${m.place === "head" ? "selected" : ""}>On my head</option><option value="full" ${m.place === "full" ? "selected" : ""}>Full frame</option><option value="spot" ${m.place === "spot" ? "selected" : ""}>Fixed spot (drag on preview)</option></select>
+      ${m.sound ? `<span title="Volume">&#128266;</span><input type="range" min="0" max="100" value="${m.vol}" style="width:70px">` : `<button class="btn" title="Attach a sound file" style="padding:1px 7px">+ sound</button>`}</div>
+    <small>used by: ${lib.filter(g => g.action === "meme:" + m.id).map(g => esc(g.name)).join(", ") || "nothing yet"}</small></div></div>`).join("")
+    + `<div class="muted" style="font-size:12px">Pictures (PNG, JPG), GIFs and video (MP4, WebM, MOV; transparency kept). itsgiving's own pictures aren't shipped: Import copies them from your clone.</div>`;
+}
+function editorHTML(g) {
+  const a = actionInfo(g.action), ok = has(a.need);
+  const endsLabel = { held: "While held (lingers ⅓ s)", again: "Same gesture again", secs: `After ${g.secs} s` }[g.ends];
+  const parts = [["lh", "Left hand"], ["rh", "Right hand"], ["face", "Face"], ["body", "Upper body"]];
+  return `<div class="scroll"><div class="ed">
+    <div class="line"><button class="btn" data-t="back">&#8592; Library</button><span class="spacer"></span><span class="sw ${g.on ? "on" : ""}" data-gon="${esc(g.id)}"><i></i>${g.on ? "On" : "Off"}</span></div>
+    <div class="line"><span style="font-size:20px">${g.icon}</span><input type="text" value="${esc(g.name)}" ${g.kind === "mine" ? "" : "disabled"}></div>
+    <div class="muted" style="font-size:12px">${esc(g.how)}</div>
+    <h3>Recording</h3>
+    ${g.kind === "mine" || g.id === "new" ? `<div class="line"><div class="takes">${Array.from({ length: g.takes }, (_, i) => `<span class="take">take ${i + 1}</span>`).join("") || `<span class="muted">no takes yet</span>`}</div></div>
+      <div class="line"><button class="btn on" data-t="rec">${g.takes ? "Record another take" : "Record take"}</button><span class="muted">3-2-1, then hold 2 s</span></div>`
+      : `<div class="muted" style="font-size:12px">Ready-made: no recording needed. Sensitivity below tunes it to you.</div>`}
+    <div class="line"><span class="muted">Counts</span>${parts.map(([k, l]) => `<label class="tick"><input type="checkbox" data-part="${k}" ${g.parts[k] ? "checked" : ""}> ${l}</label>`).join("")}</div>
+    <h3>Test</h3>
+    <div class="line"><span class="muted" style="width:44px">Match</span><span class="meter"><b id="mbar" style="width:0"></b><i style="left:${g.sens}%"></i></span><b id="mval" style="width:40px;text-align:right">-</b></div>
+    <div class="line"><button class="btn ${test && test.mode === "live" ? "on" : ""}" data-t="test">${test && test.mode === "live" ? "Stop test" : "Test live"}</button><button class="btn" data-t="mis">Misfire check (10 s)</button></div>
+    <div class="result" id="tres">${g.lastTest || "Hold the gesture while Test live runs: the bar must pass the white line to fire."}</div>
+    <h3>Does</h3>
+    <div class="line"><span class="muted" style="width:44px">Action</span><span class="pick" data-t="action"><span style="${ok ? "" : "color:#c49a3a"}">${esc(a.label)}${ok ? "" : " (" + NEEDTXT[a.need] + ")"}</span><span>&#9662;</span></span></div>
+    <div class="line"><span class="muted" style="width:44px">Ends</span><span class="pick" data-t="ends"><span>${endsLabel}</span><span>&#9662;</span></span></div>
+    <div class="line"><label class="tick"><input type="checkbox" data-flag="stop" ${g.stop ? "checked" : ""}> The stop sign ends it</label></div>
+    <div class="line"><label class="tick"><input type="checkbox" data-flag="confirm" ${g.confirm ? "checked" : ""}> Needs confirm (other hand shows Thumbs up)</label></div>
+    <div class="line"><span class="muted" style="width:70px">Sensitivity</span><input type="range" min="30" max="95" value="${g.sens}" data-sens style="flex:1"><span class="muted">hold ${g.id === "spin" ? "0.5" : "0.1"} s</span></div>
+    ${g.kind === "mine" ? `<div class="line"><span class="spacer"></span><button class="btn warn" data-t="del">Delete gesture</button></div>` : ""}
+  </div></div>`;
+}
+function actionMenu(x, y) {
+  const g = editing, items = [{ label: "None", check: !g.action, act: () => { g.action = ""; } }];
+  for (const grp of actionGroups()) {
+    if (!has(grp.need)) continue;                      /* situationally aware: only what this situation can do */
+    items.push({ hdr: grp.g });
+    for (const it of grp.items) items.push(it.sub
+      ? { label: it.label, sub: it.sub.map(s => ({ label: s, check: g.action === it.id + "|" + s, act: () => { g.action = it.id + "|" + s; } })) }
+      : { label: it.label, check: g.action === it.id, act: () => { g.action = it.id; if (it.id.startsWith("meme:")) g.ends = "held"; else if (g.ends === "held") g.ends = "again"; } });
+  }
+  const hidden = actionGroups().filter(x => !has(x.need)).map(x => `${x.g} (${NEEDTXT[x.need]})`);
+  if (hidden.length) items.push({ sep: 1 }, { note: "Not offered here: " + hidden.join(", ") + ". Gestures already set to these keep them, greyed out." });
+  openMenu(items, x, y);
+}
+function endsMenu(x, y) {
+  const g = editing;
+  openMenu([
+    { label: "While held (lingers ⅓ s) - itsgiving's way", check: g.ends === "held", act: () => { g.ends = "held"; } },
+    { label: "Same gesture again", check: g.ends === "again", act: () => { g.ends = "again"; } },
+    { label: "After N seconds", sub: [2, 3, 5, 10].map(n => ({ label: n + " s", check: g.ends === "secs" && g.secs === n, act: () => { g.ends = "secs"; g.secs = n; } })) },
+  ], x, y);
+}
+
+/* ---------------- interaction ---------------- */
+document.addEventListener("click", e => {
+  const t = e.target;
+  const sb = t.closest("#sitSeg button"); if (sb) { sit = sb.dataset.s; render(); return; }
+  const hb = t.closest("[data-hold]"); if (hb) { const k = hb.dataset.hold; held.has(k) ? held.delete(k) : held.add(k); render(); return; }
+  const on = t.closest("[data-gon]"); if (on) { e.stopPropagation(); const g = lib.find(x => x.id === on.dataset.gon); g.on = !g.on; render(); return; }
+  const op = t.closest("[data-open]"); if (op) { open[op.dataset.open] = !open[op.dataset.open]; render(); return; }
+  const tb = t.closest("[data-tab]"); if (tb) { tab = tb.dataset.tab; render(); return; }
+  const row = t.closest("[data-g]"); if (row) { editing = lib.find(x => x.id === row.dataset.g); test = null; render(); return; }
+  const b = t.closest("[data-t]"); if (!b) return;
+  const rc = b.getBoundingClientRect();
+  switch (b.dataset.t) {
+    case "gest": gestOn = !gestOn; render(); break;
+    case "more": moreMenu(rc.left - 150, rc.bottom + 2); break;
+    case "undo": say("Undid: " + lastAction); lastAction = null; render(); break;
+    case "back": editing = null; test = null; render(); break;
+    case "newg": { const g = mk({ id: "g" + Date.now(), name: "New gesture", how: "your own", icon: "✨", kind: "mine", takes: 0 }); lib.push(g); open.mine = true; editing = g; render(); startRec(g); break; }
+    case "rec": startRec(editing); break;
+    case "test": test = test && test.mode === "live" ? null : { mode: "live", t0: performance.now() }; render(); break;
+    case "mis": test = { mode: "mis", t0: performance.now(), fires: 0 }; render(); break;
+    case "action": actionMenu(rc.left, rc.bottom + 2); break;
+    case "ends": endsMenu(rc.left, rc.bottom + 2); break;
+    case "del": lib.splice(lib.indexOf(editing), 1); editing = null; render(); break;
+    case "import": say("Copied 14 pictures from your itsgiving clone, matched by name"); break;
+    case "addm": say("Pick pictures, GIFs or videos to add"); break;
+  }
+});
+document.addEventListener("change", e => {
+  const t = e.target, g = editing;
+  if (t.dataset.part && g) g.parts[t.dataset.part] = t.checked;
+  if (t.dataset.flag && g) g[t.dataset.flag] = t.checked;
+  if (t.dataset.place) MEMES.find(m => m.id === t.dataset.place).place = t.value;
+  if (t.matches("[data-sens]") && g) { g.sens = +t.value; render(); }
+  if (g && (t.dataset.flag || t.dataset.part)) render();
+});
+function startRec(g) { rec = { phase: "count", t0: performance.now(), g }; }
+
+/* ---------------- frame loop ---------------- */
+let last = performance.now();
+function frame(t) { tick(t); requestAnimationFrame(frame); }
+function tick(t) {
+  const dt = Math.min(64, t - last); last = t;
+  if (rec) {
+    const e = t - rec.t0;
+    if (rec.phase === "count" && e > 3000) { rec.phase = "hold"; rec.t0 = t; }
+    else if (rec.phase === "hold" && e > 2000) { rec.g.takes++; const g = rec.g; rec = null; say(`Take ${g.takes} saved`); if (editing === g) render(); }
+  }
+  /* gestures: arm while held, fire when armed (and confirmed), end per its rule */
+  for (const g of lib) {
+    if (!g.sim || !g.on || !gestOn) { arm[g.id] = 0; continue; }
+    const isHeld = held.has(g.sim);
+    if (!isHeld) {
+      if (g.firedHeld) { g.firedHeld = false; if (g.action.startsWith("meme:")) showing[g.action.slice(5)] = t + 330; }
+      arm[g.id] = 0; continue;
+    }
+    arm[g.id] = (arm[g.id] || 0) + dt;
+    const armed = arm[g.id] >= 400, confirmed = !g.confirm || held.has("thumbs");
+    if (armed && confirmed && !g.firedHeld) { g.firedHeld = true; fire(g, t); }
+  }
+  if (held.has("palms") && gestOn) stopAll(t);
+  for (const k in showing) if (showing[k] !== Infinity && t > showing[k]) delete showing[k];
+  paint();
+}
+function fire(g, t) {
+  const a = actionInfo(g.action);
+  if (!g.action) return;
+  if (!has(a.need)) { say(`${g.name}: ${a.label} ${NEEDTXT[a.need]}`); return; }
+  if (g.action.startsWith("meme:")) { showing[g.action.slice(5)] = g.ends === "held" ? Infinity : t + g.secs * 1000; lastAction = "meme " + g.action.slice(5); }
+  else if (g.action === "obs.rec") { recording = !recording; say(recording ? "OBS: recording started" : "OBS: recording stopped"); lastAction = recording ? "start recording" : "stop recording"; }
+  else { say(a.label); lastAction = a.label; }
+  render();
+}
+function stopAll(t) {
+  let any = false;
+  for (const k in showing) { delete showing[k]; any = true; }
+  if (any) say("Stop sign: memes ended, follow modes left, zoom put back");
+}
+function paint() {
+  const ov = $("#ovl"); if (!ov) return;
+  const t = performance.now();
+  let h = "";
+  if (grid.pv) h += `<div class="ov gridov"><i style="left:33.33%"></i><i style="left:66.66%"></i><i class="h" style="top:33.33%"></i><i class="h" style="top:66.66%"></i></div>`;
+  for (const id in showing) {
+    const m = MEMES.find(x => x.id === id); if (!m) continue;
+    const box = m.place === "full" ? "left:0;top:0;width:100%;height:100%;border-radius:0;font-size:64px;opacity:.92"
+      : m.place === "spot" ? "right:4%;top:6%;width:24%;height:30%;font-size:26px"
+      : `left:${HEAD.x - 13}%;top:${HEAD.y - 23}%;width:26%;height:46%;font-size:38px`;   /* itsgiving: square, centred on the face, 2x its size */
+    h += `<div class="meme" style="${box};background:${m.color}cc"><div>${m.word}<small>${esc(m.name)} (your picture)${m.sound ? " ♪" : ""}</small></div></div>`;
+  }
+  if (det.pv && gestOn) {
+    const keys = [...held];
+    h += handsSVG(keys);
+    for (const g of lib) {
+      if (!g.sim || !held.has(g.sim) || !g.on) continue;
+      const palm = HANDS[g.sim][0][0], frac = (arm[g.id] || 0) / 400, needC = g.confirm && !held.has("thumbs");
+      h += `<div class="ring" style="left:${palm[0]}%;top:${palm[1] + 12}%">${ringSVG(needC ? 1 : frac, needC)}</div>`;
+      h += `<span class="gname ${needC ? "amber" : ""}" style="left:${palm[0]}%;top:${palm[1] + 18}%">${esc(g.name)}${needC ? ": show Thumbs up with your other hand" : ""}</span>`;
+    }
+  }
+  if (rec) {
+    const e = t - rec.t0;
+    h += rec.phase === "count" ? `<div class="big">${3 - Math.floor(e / 1000)}</div>`
+      : `<div class="holdtxt">Hold it... ${(e / 1000).toFixed(1)} s</div><div class="holdbar"><b style="width:${Math.min(100, e / 20)}%"></b></div>`;
+  }
+  ov.innerHTML = h;
+  const ts = $("#toast"); if (ts) { ts.textContent = toastMsg; ts.classList.toggle("show", t - toastAt < 2200); }
+  /* test readouts */
+  if (editing && test) {
+    const mb = $("#mbar"), mv = $("#mval"), tr = $("#tres");
+    const pct = 88 + 6 * Math.sin(t / 400) + 2 * Math.sin(t / 97);
+    if (mb) mb.style.width = pct + "%";
+    if (mv) mv.textContent = Math.round(pct) + "%";
+    if (test.mode === "live" && tr) tr.textContent = pct > editing.sens ? `Would fire now (${Math.round(pct)}% over the ${editing.sens}% line).` : "Below the line: wouldn't fire.";
+    if (test.mode === "mis") {
+      const e = (t - test.t0) / 1000;
+      if (mb) { const idle = 18 + 10 * Math.sin(t / 300); mb.style.width = idle + "%"; mv.textContent = Math.round(idle) + "%"; }
+      if (e < 3) { if (tr) tr.textContent = `Move normally: talk, scratch, look around... ${(10 - e * 10 / 3).toFixed(0)} s`; }
+      else { editing.lastTest = `Misfire check: 0 false fires in 10 s. Live match while holding: 93%. Good to use.`; test = null; render(); }
+    }
+  }
+}
+
+/* ---------------- boot ---------------- */
+if (params.get("menu") === "action" && editing) setTimeout(() => { const b = $('[data-t="action"]').getBoundingClientRect(); actionMenu(b.left, b.bottom + 2); }, 60);
+if (params.get("settings") === "1") setTimeout(settingsDlg, 60);
+if (params.get("open") === "all") Object.keys(open).forEach(k => { open[k] = true; });
+if (params.get("rec") === "1" && editing) setTimeout(() => { startRec(editing); rec.t0 -= 3400; }, 30);
+if (params.get("test") === "1" && editing) test = { mode: "live", t0: performance.now() };
+if (params.get("grid") === "1") grid.pv = true;
+render();
+/* headless screenshots barely run animation frames, so ?shot drives the same tick from a timer */
+if (params.has("shot")) setInterval(() => tick(performance.now()), 16); else requestAnimationFrame(frame);
+</script>
+</body>
+</html>

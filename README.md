@@ -1,0 +1,45 @@
+# Rely-A-Cam-Gestures
+
+Hand and face gestures for your camera on Windows. It runs on its own with a webcam, or gets
+started by the [Rely-A-Cam](https://github.com/uukjtisa/rely-a-cam) OBS plugin to add gestures
+to your phone cameras.
+
+- **Gestures:** itsgiving's 14 face and body reactions, Google's 7 hand signs, and your own
+  (record 3 takes, test them live, check them for misfires). A confirm sign with your other hand
+  and a stop sign keep them from firing by accident.
+- **Actions:** zoom in or out, frame a box between two pinches, zoom on what you hold, follow your
+  face, turn the camera off, take a snapshot, switch OBS scenes, start or stop recording and
+  streaming, any OBS hotkey, and the phone's torch, mic and camera when attached to Rely-A-Cam.
+- **Memes:** pictures, GIFs and videos (WebM keeps its transparency) on your head, full frame or
+  in their spot, with their sound to your speakers or into calls (through VB-Cable).
+- **Outputs on its own:** its own Windows 11 virtual camera, "Rely-A-Cam Gestures", and OBS
+  Virtual Camera. Inside Rely-A-Cam it draws on the phone's source in OBS instead.
+
+## Install
+
+Run `RelyACamGestures-Setup-<version>.exe`, or tick "Also install Rely-A-Cam-Gestures" in the
+Rely-A-Cam installer. Windows 10 (1809) or 11, 64-bit. The own virtual camera needs Windows 11.
+
+## Build
+
+Visual Studio 2022 (C++), CMake 3.28+, Python 3.10 or 3.11 (for the model converter), and Inno
+Setup 6.4+ for the installer.
+
+```
+build.bat            RelWithDebInfo build and the tests
+build.bat release    Release build and the tests
+build.bat package    Release build, the tests, and build\installer\RelyACamGestures-Setup-<ver>.exe
+```
+
+`build.bat` downloads Qt 6 and FFmpeg (obs-deps), ONNX Runtime and DirectML into `.deps/`, and
+fetches Google's MediaPipe models into `models/`, converted to ONNX.
+
+## How it fits with Rely-A-Cam
+
+It's a separate program, so a crash in its vision models never takes OBS down. The plugin talks
+to it over a local pipe and shared memory: [docs/LINK.md](docs/LINK.md).
+
+## Licence
+
+GPL-3.0-or-later ([LICENSE](LICENSE)). Third-party code, models and formats:
+[docs/THIRD-PARTY.md](docs/THIRD-PARTY.md).
