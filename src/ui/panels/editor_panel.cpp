@@ -540,6 +540,8 @@ void EditorPanel::holdMenu(QPoint at) {
   gestures::GestureDef *gd = g();
   if (!gd) return;
   QMenu m(this);
+  auto *one = new QActionGroup(&m);   // the menu stays open on a pick: the tick must move, not add
+  one->setExclusive(true);
   const QString id = id_;
   for (float s : gestures::kHoldChoices) {
     QAction *a = m.addAction(holdText(s), [this, id, s] {
@@ -548,6 +550,7 @@ void EditorPanel::holdMenu(QPoint at) {
       dirty_ = true;
     });
     a->setCheckable(true);
+    a->setActionGroup(one);
     a->setChecked(std::abs(gd->hold - s) < 1e-3f);
   }
   execMenu(m, at);

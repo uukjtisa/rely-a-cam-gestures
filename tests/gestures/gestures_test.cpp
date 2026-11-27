@@ -418,6 +418,26 @@ TEST(engine_one_shot_fires_every_time) {
   CHECK(starts == 2);
 }
 
+TEST(controls_owner_edits_to_a_jobs_gesture_stick) {
+  Library l = Library::defaults();
+  Control *k = nullptr;
+  for (auto &c : l.controls.list) {
+    if (c.trigger == "sign:Victory") c.trigger.clear();   // one job per gesture, as the app keeps it
+    if (c.id == "phone.mic") k = &c;
+  }
+  CHECK(k != nullptr);
+  if (!k) return;
+  k->on = true;
+  k->trigger = "sign:Victory";
+  l.applyControls();
+  auto *v = l.find("sign:Victory");
+  v->hold = 0.2f;
+  v->ends = Ends::Held;
+  v->stop = false;
+  l.applyControls();   // the next edit anywhere
+  CHECK(std::abs(v->hold - 0.2f) < 1e-6 && v->ends == Ends::Held && !v->stop && v->action == "phone.mic");
+}
+
 TEST(controls_a_released_gesture_is_plain_again) {
   Library l = Library::defaults();
   const auto *v = l.find("sign:Victory");

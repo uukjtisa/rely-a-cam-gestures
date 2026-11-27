@@ -204,13 +204,17 @@ void Controls::apply(std::vector<GestureDef> &gestures) const {
     if (!s || !s->trigger || k.trigger.isEmpty()) continue;
     GestureDef *g = gestureById(gestures, k.trigger);
     if (!g) continue;
-    if (g->action != k.id) g->hold = ownHold(*g);   // newly given this job
-    g->action = k.id;
-    g->on = k.on;
-    g->ends = s->ends;
-    g->confirm = s->confirm;
-    g->stop = true;
-    g->hold = std::max(g->hold, s->hold);
+    // Newly given this job: it starts from the job's own rules and timing. After that they're the
+    // owner's to change in the gesture's editor; re-imposing them on every edit made the hold, the
+    // ends and the confirm snap back without a word.
+    if (g->action != k.id) {
+      g->action = k.id;
+      g->ends = s->ends;
+      g->confirm = s->confirm;
+      g->stop = true;
+      g->hold = std::max(ownHold(*g), s->hold);
+    }
+    g->on = k.on;   // the Controls tab's switch
   }
 }
 

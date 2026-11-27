@@ -28,7 +28,7 @@ struct ControlSpec {
   bool on;                 // out of the box
   bool confirm;            // needs the confirm sign from the other hand
   Ends ends;               // how its action ends (one-shots ignore it)
-  float hold;              // the least hold time its gesture gets
+  float hold;              // the hold time its gesture starts with (the owner may change it)
   const char *conflicts;   // the control it can't run with, or ""
   bool addable;            // a row per scene or hotkey, added by hand
 };
