@@ -17,6 +17,8 @@ class Library {
  public:
   std::vector<GestureDef> gestures;
   Controls controls;   // projected onto the gestures by applyControls()
+  // Zoom on what I hold: examples of a hand holding something, recorded like a gesture's takes.
+  std::vector<Take> holdTakes;
 
   static Library defaults();
   GestureDef *find(const QString &id);

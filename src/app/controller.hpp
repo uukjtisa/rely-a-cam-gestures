@@ -118,6 +118,11 @@ class Controller : public QObject {
   void deleteGesture(const QString &id);
   void deleteTake(const QString &gestureId, int index);
   void recordTake(const QString &gestureId);  // 3-2-1, then 2 s
+  // Zoom on what I hold, taught: each example is a take of a hand holding something.
+  static constexpr const char *kHoldExamples = "hold:examples";
+  int holdExamples() const { return int(gestures_.holdTakes.size()); }
+  void recordHoldExample() { recordTake(kHoldExamples); }
+  void clearHoldExamples();
   void cancelRecording();
   void testLive(const QString &gestureId);
   void misfireCheck(const QString &gestureId);
@@ -151,6 +156,7 @@ class Controller : public QObject {
   void showWindow();            // Rely-A-Cam asked for the editor
 
  private:
+  int heldHand(const vision::Observation &o) const;   // the hand matching a hold example, or -1
   Channel &cur() { return *channels_.at(current_); }
   const Channel &cur() const { return *channels_.at(current_); }
   Channel &addChannel(const QString &key, const QString &name, bool phone);

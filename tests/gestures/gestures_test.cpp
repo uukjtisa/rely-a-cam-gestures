@@ -114,6 +114,39 @@ struct FramerRun {
 
 }  // namespace
 
+TEST(framer_box_aims_with_fists_then_keeps_up_with_moving_pinches) {
+  FramerRun r;
+  r.f.setMoves({false, true, false});   // the pinch box only
+  auto fist = [](Vec2 at) {
+    vision::Hand h = pinchHand(at, 60);
+    h.world[8] = {0, -0.05f, 0};   // the index curled into the palm
+    h.signs[int(Sign::ClosedFist)] = 0.9f;
+    return h;
+  };
+  auto loosened = [](Vec2 at) {   // a moving pinch: the tips drift a little apart
+    vision::Hand h = pinchHand(at, 60);
+    h.lm[4].x += 20;
+    return h;
+  };
+  r.feed({pinchHand({200, 180}, 60), pinchHand({440, 180}, 60)}, 10);   // no aim: no box
+  CHECK(r.zoom() < 1.01);
+  r.feed({}, 10);
+  r.feed({fist({200, 180}), fist({440, 180})}, 3);                       // aim
+  CHECK(r.f.handsBusy() && r.zoom() < 1.01);
+  r.feed({pinchHand({200, 180}, 60), pinchHand({440, 180}, 60)}, 4);     // pinch both: zoom
+  const double in = r.zoom();
+  CHECK_MSG(in > 2.0, std::to_string(in));
+  for (int k = 1; k <= 6; ++k) {                                         // pull apart, loosening
+    const float d = 120 + 100 * k / 6.f;
+    if (k % 2) r.feed({loosened({320 - d, 180}), pinchHand({320 + d, 180}, 60)}, 1);
+    else r.feed({pinchHand({320 - d, 180}, 60), loosened({320 + d, 180})}, 1);
+  }
+  const double out = r.zoom();
+  CHECK_MSG(out < 1.5 && r.f.handsBusy(), std::to_string(out));
+  r.feed({}, 8);                                                         // let go: it stays
+  CHECK(std::abs(r.zoom() - out) < 1e-6 && !r.f.handsBusy());
+}
+
 TEST(framer_pinch_pulls_zoom_in_and_back_out) {
   FramerRun r;
   r.pull(60, 90);   // pinch and push toward the camera
@@ -303,10 +336,39 @@ TEST(engine_stop_sign_ends_what_listens) {
   run(withHands({signHand(Sign::Victory, 0.9f, false, {300, 200})}), 4);
   CHECK(got.size() == 1);
   const auto palm = [](bool left, float x) { return signHand(Sign::OpenPalm, 0.9f, left, {x, 200}); };
-  run(withHands({palm(true, 100), palm(false, 500)}), 10);   // 0.67 s: not yet
+  run(withHands({palm(true, 100), palm(false, 500)}), 3);    // 0.2 s: not yet
   CHECK(got.size() == 1);
-  run(withHands({palm(true, 100), palm(false, 500)}), 6);    // past 1 s
+  run(withHands({palm(true, 100), palm(false, 500)}), 2);    // past 0.3 s: fast
   CHECK(got.size() == 2 && got[1].type == Command::End && got[1].reason == "stop sign");
+}
+
+TEST(engine_two_hand_pose_never_fires_a_one_hand_gesture) {
+  for (Sign sign : {Sign::OpenPalm, Sign::ClosedFist}) {
+    Library l = signLibrary();
+    auto *g = l.find(QString("sign:") + vision::signId(sign));
+    g->on = true;
+    g->action = "camera.off";
+    g->hold = 0.3f;
+    Engine e(l);
+    Baseline b;
+    double t = 0;
+    std::vector<Command> got;
+    auto run = [&](const Observation &o, int frames) {
+      for (int i = 0; i < frames; ++i) {
+        t += 1 / 15.0;
+        for (const auto &c : e.update(o, b, t)) got.push_back(c);
+      }
+    };
+    const auto hand = [&](bool left, float x) { return signHand(sign, 0.9f, left, {x, 200}); };
+    run(withHands({hand(true, 100)}), 2);                      // the second hand is two frames late
+    run(withHands({hand(true, 100), hand(false, 500)}), 15);
+    CHECK(got.empty());
+    run(withHands({hand(true, 100)}), 15);                     // one hand lowered after the pose
+    CHECK(got.empty());
+    run(withHands({}), 8);                                     // let go, then one hand alone
+    run(withHands({hand(false, 500)}), 8);
+    CHECK(got.size() == 1 && got[0].gesture == g->id);
+  }
 }
 
 TEST(engine_pause_lets_only_the_pause_toggle_through) {

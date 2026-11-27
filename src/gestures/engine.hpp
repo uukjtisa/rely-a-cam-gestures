@@ -21,7 +21,7 @@ namespace racg::gestures {
 struct EngineConfig {
   vision::Sign confirmSign = vision::Sign::ThumbUp;
   StopSign stopSign = StopSign::BothPalms;
-  float stopHold = 1.0f;   // seconds
+  float stopHold = 0.3f;   // seconds: the stop sign is deliberate, so it acts at once
   // Actions that just happen (a snapshot, a scene switch) have no end, so they never stay active.
   std::function<bool(const QString &action)> oneShot = [](const QString &) { return false; };
 };
@@ -48,6 +48,8 @@ class Engine {
 
   // While paused only a gesture whose action is the pause toggle can fire.
   void setPaused(bool p) { paused_ = p; }
+  // Both hands are framing (the pinch box, or aiming it): no hand gesture may fire.
+  void setHandsBusy(bool b) { handsBusy_ = b; }
   bool paused() const { return paused_; }
 
   // `dry`: only the match % (Test, recording, calibration): nothing arms, fires or ends.
@@ -69,6 +71,8 @@ class Engine {
   struct Run {
     double seenSince = -1, lastMatch = -1e9, until = 0;
     bool latched = false;
+    double lastRaw = -1e9;   // last frame it was over its line, allowed or not
+    bool claimed = false;    // caught in a two-hand pose: quiet until its hand lets go
     GestureState st;
   };
   Library &lib_;
@@ -77,7 +81,7 @@ class Engine {
   ReadyEval ready_;
   std::map<QString, Run> runs_;
   double last_ = -1, stopSince_ = -1;
-  bool stopDone_ = false, paused_ = false;
+  bool stopDone_ = false, paused_ = false, handsBusy_ = false;
   float stopProgress_ = 0;
 };
 

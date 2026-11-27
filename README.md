@@ -6,9 +6,11 @@ to your phone cameras.
 
 - **Gestures:** itsgiving's 14 face and body reactions, Google's 7 hand signs, and your own
   (record 3 takes, test them live, check them for misfires). A confirm sign with your other hand
-  and a stop sign keep them from firing by accident.
+  and a stop sign (both palms, acts in 0.3 s) keep them from firing by accident. Two hands making
+  one pose never fire a one-hand gesture: both palms aren't "Open palm", both fists aren't "Fist".
 - **Controls:** a fixed list, one gesture per job. Pinch zoom (pinch and pull back to zoom out, or
-  push toward the camera to zoom in; let go and pinch again to keep going), a box between two pinches, zoom on what you hold,
+  push toward the camera to zoom in; let go and pinch again to keep going), a pinch box (aim with both fists, then pinch both; move the pinches to adjust it), zoom on what
+  you hold (teach it with examples of holding things),
   follow your face (hold its gesture and pinch with the other hand to set how close), camera off,
   snapshot, OBS scenes, recording, streaming and hotkeys, and the phone's torch, mic and camera
   when attached to Rely-A-Cam. Controls that read the same move switch each other off.

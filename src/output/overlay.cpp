@@ -116,6 +116,13 @@ void drawDetection(QPainter &p, const DetectionState &s, const Mapping &m, float
   const QFontMetricsF fm(f);
   for (const auto &g : s.gestures) {
     if (g.face ? !face : !hands) continue;
+    if (!g.box.isEmpty()) {
+      QPen pen(kJoint, 2 * scale, Qt::DashLine);
+      p.setPen(pen);
+      p.setBrush(Qt::NoBrush);
+      p.drawRect(QRectF(m(Vec2{float(g.box.left()), float(g.box.top())}),
+                        m(Vec2{float(g.box.right()), float(g.box.bottom())})).normalized());
+    }
     const QPointF c = m(g.anchor) + QPointF(0, 30 * scale);
     drawRing(p, c, g.waiting ? 1.f : g.armed, g.waiting, scale);
     const QString label = g.waiting ? g.name + ": show " + g.confirmName + " with your other hand" : g.name;

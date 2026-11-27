@@ -5,6 +5,10 @@
 
 namespace racg::gestures {
 
+// The strict two-hand guard (Engine::update): how weakly the other hand may show the same sign and
+// still count as a two-hand pose.
+constexpr float kPairSign = 0.35f;
+
 Engine::Engine(Library &lib) : lib_(lib) {}
 
 const GestureState *Engine::state(const QString &id) const {
@@ -136,6 +140,36 @@ std::vector<Command> Engine::update(const vision::Observation &obs, const Baseli
       if (!(used & (1u << i)) && obs.hands[i].signs[int(cfg_.confirmSign)] >= 0.5f) return true;
     return false;
   };
+
+  // The strict two-hand guard. Two hands making one pose (the stop sign, both fists, both palms,
+  // a two-hand gesture, the pinch box) are never a one-hand gesture: "Open palm" must not turn the
+  // camera off when both palms come up, nor a one-hand "Fist" fire for both fists. A one-hand
+  // gesture caught in such a pose stays quiet until its hand lets go, so lowering one hand after
+  // the pose doesn't fire it either.
+  const unsigned all = obs.hands.size() >= 2 ? 3u : 0u;
+  unsigned pair = handsBusy_ || stopUp ? all : 0u;
+  if (cfg_.stopSign == StopSign::BothPalms && stopSignScore(StopSign::BothPalms, obs) >= 0.7f) pair = all;
+  for (const auto &g : lib_.gestures) {
+    const GestureState &s = runs_[g.id].st;
+    if (g.on && !g.action.isEmpty() && std::popcount(s.hands) >= 2 && s.pct >= g.sens) pair |= s.hands;
+  }
+  // The other hand making the same sign, even weakly: the second hand is often a frame behind.
+  auto otherShows = [&](vision::Sign sign, unsigned used) {
+    for (size_t i = 0; i < obs.hands.size() && i < 32; ++i)
+      if (!(used & (1u << i)) && !vision::isPinch(obs.hands[i]) && obs.hands[i].signs[int(sign)] >= kPairSign) return true;
+    return false;
+  };
+  for (const auto &g : lib_.gestures) {
+    Run &r = runs_[g.id];
+    GestureState &s = r.st;
+    const bool over = s.pct >= g.sens;
+    if (over) r.lastRaw = now;
+    else if (now - r.lastRaw > kHoldSeconds) r.claimed = false;
+    if (over && std::popcount(s.hands) < 2 &&
+        (stopUp || (s.hands & pair) || (g.kind == Kind::Sign && otherShows(g.sign(), s.hands))))
+      r.claimed = true;
+    if (r.claimed) s.matching = false;
+  }
 
   // Pass 2: hold, confirm, fire, end.
   for (const auto &g : lib_.gestures) {

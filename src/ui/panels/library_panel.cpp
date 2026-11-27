@@ -20,6 +20,8 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSlider>
+#include <QTimer>
+#include <QApplication>
 #include <QStackedWidget>
 #include <QStandardItemModel>
 #include <QVBoxLayout>
@@ -115,6 +117,7 @@ QLabel *elided(const QString &t, QWidget *parent, bool small = false) {
 void fitCombo(QComboBox *cb) {
   cb->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
   cb->setMinimumContentsLength(4);
+  cb->setMaxVisibleItems(10);   // a short list that scrolls, not every gesture at once
   cb->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 }
 
@@ -181,6 +184,10 @@ LibraryPanel::LibraryPanel(app::Controller &c, QWidget *parent) : QWidget(parent
   foot_->setFixedHeight(foot_->sizeHint().height());
   v->addWidget(foot_);
 
+  rebuildLater_ = new QTimer(this);
+  rebuildLater_->setSingleShot(true);
+  rebuildLater_->setInterval(250);
+  connect(rebuildLater_, &QTimer::timeout, this, &LibraryPanel::rebuild);
   connect(&c_, &app::Controller::libraryChanged, this, &LibraryPanel::rebuild);
   connect(&c_, &app::Controller::statusChanged, this, [this] {
     // The situation decides the "needs OBS" text; rebuild only when it changes.
@@ -204,6 +211,12 @@ void LibraryPanel::setTab(int t) {
 }
 
 void LibraryPanel::rebuild() {
+  // Rebuilding deletes the rows, and an open list (a gesture or placement picker) with them:
+  // the list vanished under the cursor whenever the plugin re-sent its phones. Wait it out.
+  if (QApplication::activePopupWidget()) {
+    rebuildLater_->start();
+    return;
+  }
   setUpdatesEnabled(false);
   while (QLayoutItem *it = listLay_->takeAt(0)) {
     if (it->widget()) it->widget()->deleteLater();
@@ -357,6 +370,25 @@ QWidget *LibraryPanel::controlRow(const QString &id) {
     auto *subL = note(sub, row);
     if (needs) subL->setProperty("need", true);
     v->addWidget(subL);
+  }
+
+  // Zoom on what I hold learns from examples, like recording a gesture.
+  if (id == "zoom.hold") {
+    auto *h = new QHBoxLayout;
+    h->setSpacing(6);
+    const int n = c_.holdExamples();
+    auto *teach = new QPushButton(n ? QString("+ Example (%1 taught)").arg(n) : QString("+ Teach it: hold something up"), row);
+    teach->setToolTip("3-2-1, then hold the thing up for 2 s, the way you will hold it on camera. "
+                      "More examples (other things, other angles, either hand) make it steadier.");
+    connect(teach, &QPushButton::clicked, this, [this] { c_.recordHoldExample(); });
+    h->addWidget(teach, 1);
+    if (n) {
+      auto *clr = new QPushButton("Clear", row);
+      clr->setToolTip("Forget every taught example");
+      connect(clr, &QPushButton::clicked, this, [this] { c_.clearHoldExamples(); });
+      h->addWidget(clr);
+    }
+    v->addLayout(h);
   }
 
   // Its gesture, on a line of its own so nothing crowds it.

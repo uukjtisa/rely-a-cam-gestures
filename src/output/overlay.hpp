@@ -26,6 +26,7 @@ struct DetectionState {
     QString confirmName;      // "Thumbs up"
     Vec2 anchor;              // analysed-frame pixels
     bool face = false;        // the face map's label (the face gesture you're making), not a gesture's
+    QRectF box;               // analysed-frame pixels: the pinch box, or where it will land
   };
   std::vector<Gesture> gestures;
   float stop = 0;             // the stop sign's progress, 0..1

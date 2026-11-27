@@ -120,7 +120,9 @@ QJsonObject Library::toJson() const {
     }
     a.append(o);
   }
-  return {{"version", kVersion}, {"gestures", a}, {"controls", controls.toJson()}};
+  QJsonArray held;
+  for (const auto &take : holdTakes) held.append(take.toJson());
+  return {{"version", kVersion}, {"gestures", a}, {"controls", controls.toJson()}, {"holdTakes", held}};
 }
 
 Library Library::fromJson(const QJsonObject &root) {
@@ -152,6 +154,7 @@ Library Library::fromJson(const QJsonObject &root) {
     g->hold = std::clamp(float(o["hold"].toDouble(g->hold)), 0.03f, 5.f);
   }
   l.controls = Controls::fromJson(root["controls"], l.gestures);
+  for (const auto &t : root["holdTakes"].toArray()) l.holdTakes.push_back(Take::fromJson(t.toObject()));
   l.applyControls();
   return l;
 }

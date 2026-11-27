@@ -16,6 +16,8 @@
 #include <QTemporaryDir>
 #include <QTimer>
 
+#include <bit>
+
 namespace racg::app {
 
 using gestures::Command;
@@ -573,6 +575,17 @@ void Controller::onObservation(Channel &ch, std::shared_ptr<const vision::Observ
     gestures::GestureDef *g = gestures_.find(recorder_.gestureId);
     if (!recorder_.take) {
       toast(recorder_.error);
+    } else if (recorder_.gestureId == kHoldExamples) {
+      gestures::Take take = *recorder_.take;
+      if (!take.hand[0].seen && !take.hand[1].seen) {
+        toast("No hand seen: hold the thing up in front of the camera and try again");
+      } else {
+        for (auto &h : take.hand) h.placed = false;   // held anywhere, not at one spot by the face
+        gestures_.holdTakes.push_back(take);
+        gestures_.save(paths::gesturesFile());
+        toast(QString("Example %1 taught: Zoom on what I hold").arg(gestures_.holdTakes.size()));
+        Q_EMIT libraryChanged();
+      }
     } else if (g) {
       gestures::Take take = *recorder_.take;
       const QString file = QString("%1_%2.jpg").arg(QString(g->id).replace(':', '_')).arg(QDateTime::currentMSecsSinceEpoch());
@@ -589,10 +602,12 @@ void Controller::onObservation(Channel &ch, std::shared_ptr<const vision::Observ
     }
   }
 
+  ch.engine.setHandsBusy(ch.framer.handsBusy());
   const auto cmds = ch.engine.update(*obs, baseline_, t, busy);
   if (shown && tester_.mode() != gestures::Tester::Mode::Off)
     if (const auto *g = gestures_.find(tester_.gestureId())) tester_.add(*g, ch.engine.state(g->id), t);
   runCommands(ch, cmds);
+  ch.framer.setTaughtHand(heldHand(*obs));
   ch.framer.update(*obs, t);
   // The stop sign also puts the framing back: the whole picture, follow off.
   if (ch.engine.stopProgress() >= 1) {
@@ -657,6 +672,7 @@ void Controller::onObservation(Channel &ch, std::shared_ptr<const vision::Observ
     v.name = mk.text;
     v.armed = mk.ring;
     v.anchor = mk.at;
+    v.box = mk.box;
     if (ch.phone) detG.append(label(v));
     ds.gestures.push_back(v);
   }
@@ -787,6 +803,7 @@ void Controller::onLinkMessage(link::Msg type, const QJsonObject &j) {
   switch (type) {
     case link::Msg::Phones: {
       // Phones with gestures on: one channel each; gone ones end their actions.
+      const auto before = phones();
       QStringList keep;
       for (const auto &v : j["phones"].toArray()) {
         const QJsonObject p = v.toObject();
@@ -809,7 +826,7 @@ void Controller::onLinkMessage(link::Msg type, const QJsonObject &j) {
       }
       if (!keep.isEmpty() && !keep.contains(current_)) current_ = keep.first();
       Q_EMIT statusChanged();
-      Q_EMIT libraryChanged();
+      if (phones() != before) Q_EMIT libraryChanged();   // the plugin re-sends the same list often
       break;
     }
     case link::Msg::Phone: {
@@ -1041,6 +1058,21 @@ void Controller::recordTake(const QString &gestureId) {
   tester_.stop();
   recorder_.start(gestureId, now());
   Q_EMIT statusChanged();
+}
+
+void Controller::clearHoldExamples() {
+  gestures_.holdTakes.clear();
+  gestures_.save(paths::gesturesFile());
+  toast("Hold examples cleared");
+  Q_EMIT libraryChanged();
+}
+
+int Controller::heldHand(const vision::Observation &o) const {
+  if (gestures_.holdTakes.empty() || !moves().hold) return -1;
+  gestures::Parts p;
+  p.leftHand = p.rightHand = true;
+  const gestures::Match m = gestures::matchCustom(gestures_.holdTakes, p, o, baseline_);
+  return m.score >= 1 && m.hands ? std::countr_zero(m.hands) : -1;   // 60 %, the gestures' own line
 }
 
 void Controller::cancelRecording() {

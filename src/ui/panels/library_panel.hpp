@@ -12,6 +12,8 @@ class QPushButton;
 class QStackedWidget;
 class QComboBox;
 
+class QTimer;
+
 namespace racg::app {
 class Controller;
 }
@@ -50,6 +52,7 @@ class LibraryPanel : public QWidget {
 
   app::Controller &c_;
   int tab_ = 0, lastSituation_ = -1;
+  QTimer *rebuildLater_ = nullptr;
   bool open_[3] = {true, false, false};   // Mine, reactions, signs
   QPushButton *tabBtn_[3]{};
   QWidget *list_ = nullptr;

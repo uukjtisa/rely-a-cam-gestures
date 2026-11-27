@@ -31,6 +31,7 @@ QPushButton:hover { background: @grey3; border-color: @grey1; }
 QPushButton:checked, QPushButton[on="true"] { background: @blue3; border-color: @blue2; }
 QPushButton[warn="true"] { background: @warnFill; border-color: @red3; }
 QPushButton:disabled { color: rgba(255,255,255,0.45); background: rgba(60,64,77,0.45); border-color: transparent; }
+QComboBox { combobox-popup: 0; }
 QComboBox, QLineEdit, QSpinBox { background: @grey4; border: 1px solid @grey1; border-radius: @rpx; padding: 2px 6px; }
 QLineEdit:disabled { color: @muted; }
 QComboBox::drop-down { border: 0; width: 16px; }

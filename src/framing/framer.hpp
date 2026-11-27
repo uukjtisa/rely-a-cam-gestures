@@ -27,7 +27,7 @@
 namespace racg::framing {
 
 constexpr float kPresets[] = {1.0f, 1.5f, 2.0f, 3.0f};
-constexpr double kBoxWindow = 0.5, kHoldPinch = 0.7, kFaceLost = 2.0, kGrab = 0.12;
+constexpr double kBoxWindow = 0.5, kAimWindow = 1.0, kHoldPinch = 0.7, kFaceLost = 2.0, kGrab = 0.12;
 constexpr double kMaxZoom = 5.0;
 constexpr double kFollowSpanDefault = 1.8, kFollowSpanMin = 1.1, kFollowSpanMax = 6.0;
 
@@ -52,6 +52,10 @@ class Framer {
   void beginChord();
   bool endChord();                  // returns whether follow is on afterwards
   void reset();                     // the stop sign: the whole picture, follow off
+  // Both hands are aiming or drawing the pinch box: no hand gesture may fire meanwhile.
+  bool handsBusy() const;
+  // Before update(): the hand that matches a taught "what I hold" example this frame, or -1.
+  void setTaughtHand(int i);
 
   // Each observation (UI thread), with its time in seconds.
   void update(const vision::Observation &obs, double now);
@@ -65,6 +69,7 @@ class Framer {
     Vec2 at;
     float ring = 0;
     QString text;
+    QRectF box;   // a box to draw (analysed pixels): the pinch box, or where it will land
   };
   std::vector<Mark> marks() const;
 
@@ -79,9 +84,10 @@ class Framer {
   bool follow_ = false, chord_ = false, chordAdjusted_ = false, spanChanged_ = false;
   double span_ = kFollowSpanDefault, faceH_ = 0.3;
   QRectF followCrop_, holdCrop_, boxCrop_;
-  bool followSet_ = false, holdSet_ = false, boxing_ = false;
+  bool followSet_ = false, holdSet_ = false, boxing_ = false, aiming_ = false;
   double pinch_[2] = {-1, -1};       // when each hand started pinching
-  double holdSince_ = -1, faceSeen_ = -1;
+  double holdSince_ = -1, holdLost_ = -1, faceSeen_ = -1, aimSeen_ = -1, boxLost_ = -1;
+  int taught_ = -1;
   Vec2 holdAt_;
 
   struct Grab {

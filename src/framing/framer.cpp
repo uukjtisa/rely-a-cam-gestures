@@ -7,6 +7,7 @@ namespace racg::framing {
 
 namespace {
 constexpr double kEase = 0.25;        // seconds: the crop covers ~63 % of the way in this time
+constexpr double kEaseBox = 0.08;     // while the pinch box is held: it keeps up with moving hands
 constexpr int kPresetCount = int(sizeof(kPresets) / sizeof(kPresets[0]));
 constexpr double kGain = 2.2;         // zoom = (hand size now / at the grab) ^ kGain
 constexpr double kStill = 0.35;       // a grab restarts if the pinch moves this many hand sizes
@@ -125,8 +126,19 @@ void Framer::reset() {
   followSet_ = holdSet_ = boxing_ = false;
   grab_ = {};
   pinch_[0] = pinch_[1] = -1;
-  holdSince_ = -1;
+  holdSince_ = holdLost_ = aimSeen_ = boxLost_ = -1;
+  aiming_ = false;
   target_ = QRectF(0, 0, 1, 1);   // at once, even before the next picture
+}
+
+bool Framer::handsBusy() const {
+  std::lock_guard l(mu_);
+  return aiming_ || boxing_;
+}
+
+void Framer::setTaughtHand(int i) {
+  std::lock_guard l(mu_);
+  taught_ = i;
 }
 
 QRectF Framer::aspectBox(QPointF c, double h) const {
@@ -166,27 +178,60 @@ void Framer::update(const vision::Observation &obs, double now) {
     followSet_ = false;   // eases back
   }
 
-  // Pinch box: both hands pinching, started within half a second of each other.
+  // Pinch box: aim with both fists (a marker shows where the box lands), then pinch both to zoom
+  // there. Fists, because two open palms are the stop sign. The pinches start within half a second
+  // of each other and within a second of the aim; the box follows them until they let go.
+  auto boxOf = [&](QPointF a, QPointF b) {
+    return aspectBox((a + b) / 2, std::max(std::abs(a.y() - b.y()), std::abs(a.x() - b.x())) * 1.1);
+  };
+  auto pixels = [&](const QRectF &r) { return QRectF(r.x() * W, r.y() * H, r.width() * W, r.height() * H); };
+  auto label = [](const QRectF &r) { return QString("Box %1x").arg(1.0 / r.height(), 0, 'f', 1); };
+  aiming_ = false;
+  if (moves_.box && !boxing_ && obs.hands.size() == 2) {
+    auto fist = [](const vision::Hand &h) {
+      return !vision::isPinch(h) && h.signs[int(vision::Sign::ClosedFist)] >= 0.5f;
+    };
+    if (fist(obs.hands[0]) && fist(obs.hands[1])) {
+      const Vec2 pa = pinchPoint(obs.hands[0]), pb = pinchPoint(obs.hands[1]);
+      const QRectF aim = boxOf(frac(pa), frac(pb));
+      aiming_ = true;
+      aimSeen_ = now;
+      marks_.push_back({(pa + pb) / 2, 0.f, label(aim) + ": pinch both", pixels(aim)});
+    }
+  }
+  // Moving pinches loosen (the tips drift apart, the picture blurs). While the box is held a hand
+  // keeps it with its tips merely close, and the box lets go only after a moment without both.
+  auto loose = [](const vision::Hand &h) {
+    return span(h.lm[4].xy(), h.lm[8].xy()) < span(h.lm[0].xy(), h.lm[9].xy()) * 0.45;
+  };
   for (int i = 0; i < 2; ++i) {
-    const bool p = i < int(obs.hands.size()) && vision::isPinch(obs.hands[size_t(i)]);
+    const bool p = i < int(obs.hands.size()) &&
+                   (vision::isPinch(obs.hands[size_t(i)]) || (boxing_ && loose(obs.hands[size_t(i)])));
     if (!p) pinch_[i] = -1;
     else if (pinch_[i] < 0) pinch_[i] = now;
   }
   const bool twoPinch = moves_.box && obs.hands.size() == 2 && pinch_[0] >= 0 && pinch_[1] >= 0 &&
-                        std::abs(pinch_[0] - pinch_[1]) <= kBoxWindow;
+                        (boxing_ || (std::abs(pinch_[0] - pinch_[1]) <= kBoxWindow && aimSeen_ >= 0 &&
+                                     now - aimSeen_ <= kAimWindow));
   if (twoPinch) {
     const Vec2 pa = pinchPoint(obs.hands[0]), pb = pinchPoint(obs.hands[1]);
-    const QPointF a = frac(pa), b = frac(pb);
-    const double h = std::max(std::abs(a.y() - b.y()), std::abs(a.x() - b.x()));
-    boxCrop_ = aspectBox((a + b) / 2, h * 1.1);
+    boxCrop_ = boxOf(frac(pa), frac(pb));
     boxing_ = true;
+    boxLost_ = -1;
     grab_ = {};
     holdSince_ = -1;
-    marks_.push_back({(pa + pb) / 2, 1.f, QString("Box %1x").arg(1.0 / boxCrop_.height(), 0, 'f', 1)});
+    marks_.push_back({(pa + pb) / 2, 1.f, label(boxCrop_), pixels(boxCrop_)});
   } else if (boxing_) {
-    boxing_ = false;   // let go: the box stays as the zoom
-    zoom_ = std::clamp(1.0 / boxCrop_.height(), 1.0, kMaxZoom);
-    centre_ = boxCrop_.center();
+    if (boxLost_ < 0) boxLost_ = now;
+    if (now - boxLost_ > kLetGo * 2) {
+      boxing_ = false;   // let go: the box stays as the zoom
+      boxLost_ = aimSeen_ = -1;   // and the next box needs a new aim
+      zoom_ = std::clamp(1.0 / boxCrop_.height(), 1.0, kMaxZoom);
+      centre_ = boxCrop_.center();
+    } else {
+      const QPointF c = boxCrop_.center();
+      marks_.push_back({Vec2{float(c.x() * W), float(c.y() * H)}, 1.f, label(boxCrop_), pixels(boxCrop_)});
+    }
   }
 
   // A pinch sets how close follow is only while follow frames a face, or its gesture is held: with
@@ -262,19 +307,28 @@ void Framer::update(const vision::Observation &obs, double now) {
       if (now - grab_.lostAt > kLetGo) grab_ = {};   // let go: the zoom stays
     }
   } else if (moves_.hold && !boxing_) {
-    // Zoom on what I hold: one pinch held still; the picture follows it until the pinch lets go.
-    if (!ph) {
-      holdSince_ = -1;
-      holdSet_ = false;
+    // Zoom on what I hold: a pinch, or a hand that matches an example taught on the Controls tab,
+    // held still; the picture follows it until it lets go (a missed frame or two doesn't count).
+    const vision::Hand *hh = ph;
+    if (!hh && taught_ >= 0 && taught_ < int(obs.hands.size())) hh = &obs.hands[size_t(taught_)];
+    if (!hh) {
+      if (holdSet_ && holdLost_ < 0) holdLost_ = now;
+      if (!holdSet_ || now - holdLost_ > kLetGo * 2) {
+        holdSince_ = holdLost_ = -1;
+        holdSet_ = false;
+      }
     } else {
-      const Vec2 at = pinchPoint(*ph);
-      const double size = handSize(*ph);
+      holdLost_ = -1;
+      // A pinch holds at its fingertips; a taught hand holds in the middle of its grip.
+      const Vec2 grip = (hh->lm[4].xy() + hh->lm[8].xy() + hh->lm[12].xy() + hh->lm[9].xy()) / 4;
+      const Vec2 at = hh == ph ? pinchPoint(*hh) : grip;
+      const double size = handSize(*hh);
       if (holdSince_ < 0 || (!holdSet_ && span(at, holdAt_) > kStill * size)) {
         holdSince_ = now;
         holdAt_ = at;
       }
       if (now - holdSince_ >= kHoldPinch || holdSet_) {
-        holdCrop_ = aspectBox(frac(ph->lm[8].xy()), size / H * 3.2);
+        holdCrop_ = aspectBox(frac(hh == ph ? hh->lm[8].xy() : grip), size / H * 3.2);
         holdSet_ = true;
       } else {
         marks_.push_back({at, float((now - holdSince_) / kHoldPinch), "Zoom on what I hold"});
@@ -305,7 +359,7 @@ QRectF Framer::crop(double now) {
     cur_ = target_;
   } else {
     const double dt = std::clamp(now - curAt_, 0.0, 0.5);
-    const double k = 1 - std::exp(-dt / kEase);
+    const double k = 1 - std::exp(-dt / (boxing_ ? kEaseBox : kEase));
     cur_ = QRectF(cur_.x() + (target_.x() - cur_.x()) * k, cur_.y() + (target_.y() - cur_.y()) * k,
                   cur_.width() + (target_.width() - cur_.width()) * k, cur_.height() + (target_.height() - cur_.height()) * k);
   }
