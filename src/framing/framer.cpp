@@ -12,6 +12,7 @@ constexpr double kGain = 2.2;         // zoom = (hand size now / at the grab) ^ 
 constexpr double kStill = 0.35;       // a grab restarts if the pinch moves this many hand sizes
 constexpr double kLetGo = 0.15;       // seconds without the pinch before a grab lets go
 constexpr double kSizeSmooth = 0.4;   // the hand size's smoothing (new sample's weight)
+constexpr double kDeadband = 0.05;    // a grabbed hand's size can wobble this much before it zooms
 
 double span(Vec2 a, Vec2 b) { return std::hypot(a.x - b.x, a.y - b.y); }
 
@@ -125,6 +126,7 @@ void Framer::reset() {
   grab_ = {};
   pinch_[0] = pinch_[1] = -1;
   holdSince_ = -1;
+  target_ = QRectF(0, 0, 1, 1);   // at once, even before the next picture
 }
 
 QRectF Framer::aspectBox(QPointF c, double h) const {
@@ -187,6 +189,10 @@ void Framer::update(const vision::Observation &obs, double now) {
     centre_ = boxCrop_.center();
   }
 
+  // A pinch sets how close follow is only while follow frames a face, or its gesture is held: with
+  // no face in sight the picture is the manual zoom, and the pinch must move that.
+  const bool adjustFollow = chord_ || (follow_ && followSet_);
+
   // One hand pinching: the pinch the grab is following, else the first one.
   const vision::Hand *ph = nullptr;
   if (!boxing_) {
@@ -218,30 +224,29 @@ void Framer::update(const vision::Observation &obs, double now) {
       }
       grab_.size = grab_.size * (1 - kSizeSmooth) + size * kSizeSmooth;
       if (grab_.arming) {
-        if (span(at, grab_.at0) > kStill * size) {   // moving: not a deliberate grab yet
-          grab_.since = now;
-          grab_.at0 = at;
-        }
-        const double need = moves_.box ? std::max(kGrab, kBoxWindow) : kGrab;
-        const float ring = float(std::clamp((now - grab_.since) / need, 0.0, 1.0));
+        // No holding still: the hand may already be moving (pinch, pull, let go, again).
+        const float ring = float(std::clamp((now - grab_.since) / kGrab, 0.0, 1.0));
         if (ring >= 1) {
           grab_.arming = false;
           grab_.held = true;
           grab_.size0 = grab_.size;
-          grab_.forFollow = following;
-          grab_.base = following ? span_ : zoom_;
+          grab_.forFollow = adjustFollow;
+          grab_.base = adjustFollow ? span_ : zoom_;
         } else {
-          marks_.push_back({at, ring, following ? "Follow: how close" : "Pinch zoom"});
+          marks_.push_back({at, ring, adjustFollow ? "Follow: how close" : "Pinch zoom"});
         }
       }
       if (grab_.held) {
-        if (grab_.forFollow != following) {   // the follow chord began or ended mid-grab
-          grab_.forFollow = following;
+        if (grab_.forFollow != adjustFollow) {   // follow began or ended framing mid-grab
+          grab_.forFollow = adjustFollow;
           grab_.size0 = grab_.size;
-          grab_.base = following ? span_ : zoom_;
+          grab_.base = adjustFollow ? span_ : zoom_;
         }
-        const double f = std::pow(grab_.size / std::max(1e-6, grab_.size0), kGain);
-        if (following) {
+        // The size change past a small deadband, so a steady pinch doesn't creep.
+        double r = std::log(grab_.size / std::max(1e-6, grab_.size0));
+        r = r > 0 ? std::max(0.0, r - std::log1p(kDeadband)) : std::min(0.0, r + std::log1p(kDeadband));
+        const double f = std::exp(r * kGain);
+        if (adjustFollow) {
           span_ = std::clamp(grab_.base / f, kFollowSpanMin, kFollowSpanMax);
           chordAdjusted_ |= chord_;
           spanChanged_ = true;

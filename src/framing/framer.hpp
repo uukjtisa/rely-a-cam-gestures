@@ -1,10 +1,10 @@
 // Framing on one picture: which part of it the output shows. Everything is a crop of the
 // (mirrored) picture, eased over time; the zoom steps use the webcam's own zoom instead when it
 // has one (the action layer decides that). The moves are always on while their control is:
-//   pinch zoom: one hand pinches and holds still (1/3 s, or 1/2 s while Pinch box is on, so two
-//     hands have time to pinch together), then pushing toward the camera zooms in and pulling
-//     back zooms out (the hand's size on screen is its distance). Let go and pinch again to keep
-//     going, hand over hand. While following, it sets how close follow frames the face instead.
+//   pinch zoom: a pinch grabs the picture at once (kGrab steadies it against a flicker); pushing
+//     toward the camera while pinched zooms in, pulling back zooms out (the hand's size on screen
+//     is its distance). Let go and pinch again to keep going, hand over hand, like a rope. While
+//     follow is framing a face (or its gesture is held) it sets how close follow is instead.
 //   pinch box: both hands pinch within 0.5 s; the box between them follows them, and stays as the
 //     zoom when they let go.
 //   zoom on what I hold: one pinch held still 0.7 s; the hand and what it holds fill the frame
@@ -27,7 +27,7 @@
 namespace racg::framing {
 
 constexpr float kPresets[] = {1.0f, 1.5f, 2.0f, 3.0f};
-constexpr double kBoxWindow = 0.5, kHoldPinch = 0.7, kFaceLost = 2.0, kGrab = 1.0 / 3;
+constexpr double kBoxWindow = 0.5, kHoldPinch = 0.7, kFaceLost = 2.0, kGrab = 0.12;
 constexpr double kMaxZoom = 5.0;
 constexpr double kFollowSpanDefault = 1.8, kFollowSpanMin = 1.1, kFollowSpanMax = 6.0;
 

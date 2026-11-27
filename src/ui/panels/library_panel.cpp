@@ -111,6 +111,13 @@ QLabel *elided(const QString &t, QWidget *parent, bool small = false) {
   return l;
 }
 
+// A combo that shrinks to the space it has (its long entries show in full in its list).
+void fitCombo(QComboBox *cb) {
+  cb->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+  cb->setMinimumContentsLength(4);
+  cb->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+}
+
 }  // namespace
 
 LibraryPanel::LibraryPanel(app::Controller &c, QWidget *parent) : QWidget(parent), c_(c) {
@@ -313,13 +320,29 @@ QWidget *LibraryPanel::controlRow(const QString &id) {
   const gestures::ControlSpec *s = gestures::controlSpec(id);
   auto *row = new Row(list_);
   row->setCursor(Qt::ArrowCursor);
-  auto *h = new QHBoxLayout(row);
-  h->setContentsMargins(7, 5, 7, 5);
-  h->setSpacing(8);
+  auto *v = new QVBoxLayout(row);
+  v->setContentsMargins(7, 5, 7, 6);
+  v->setSpacing(3);
 
-  auto *t = new QVBoxLayout;
-  t->setSpacing(0);
-  t->addWidget(elided(gestures::controlLabel(id), row));
+  // Name, then (for an added scene or hotkey) its ×, then the switch.
+  auto *top = new QHBoxLayout;
+  top->setSpacing(8);
+  top->addWidget(elided(gestures::controlLabel(id), row), 1);
+  if (s->addable) {
+    auto *x = new QPushButton("×", row);
+    x->setToolTip("Remove this control");
+    x->setFixedWidth(26);
+    connect(x, &QPushButton::clicked, this, [this, id] { c_.removeControl(id); });
+    top->addWidget(x);
+  }
+  auto *sw = new Switch({}, row);
+  sw->setChecked(k->on);
+  sw->setToolTip("On/off");
+  connect(sw, &Switch::toggled, this, [this, id](bool on) { c_.setControlOn(id, on); });
+  top->addWidget(sw);
+  v->addLayout(top);
+
+  // What it does, wrapped.
   QString sub = s->how;
   const auto sit = c_.situation();
   const auto inf = actions::info(id, sit, c_.memes());
@@ -331,26 +354,21 @@ QWidget *LibraryPanel::controlRow(const QString &id) {
     sub += (sub.isEmpty() ? QString() : QString(" · ")) + "then " + vision::signLabel(c_.settings().confirmSign) +
            " with the other hand";
   if (!sub.isEmpty()) {
-    auto *subL = elided(sub, row, true);
-    subL->setToolTip(sub);
+    auto *subL = note(sub, row);
     if (needs) subL->setProperty("need", true);
-    t->addWidget(subL);
+    v->addWidget(subL);
   }
-  h->addLayout(t, 1);
 
-  if (!gestures::isMove(id)) h->addWidget(triggerCombo(id));
-  if (s->addable) {
-    auto *x = new QPushButton("×", row);
-    x->setToolTip("Remove this control");
-    x->setFixedWidth(26);
-    connect(x, &QPushButton::clicked, this, [this, id] { c_.removeControl(id); });
-    h->addWidget(x);
+  // Its gesture, on a line of its own so nothing crowds it.
+  if (!gestures::isMove(id)) {
+    auto *g = new QHBoxLayout;
+    g->setSpacing(6);
+    auto *gl = new QLabel("Gesture", row);
+    gl->setProperty("muted", true);
+    g->addWidget(gl);
+    g->addWidget(triggerCombo(id), 1);
+    v->addLayout(g);
   }
-  auto *sw = new Switch({}, row);
-  sw->setChecked(k->on);
-  sw->setToolTip("On/off");
-  connect(sw, &Switch::toggled, this, [this, id](bool on) { c_.setControlOn(id, on); });
-  h->addWidget(sw);
   if (!k->on) {
     auto *fx = new QGraphicsOpacityEffect(row);
     fx->setOpacity(0.55);
@@ -380,9 +398,7 @@ QComboBox *LibraryPanel::triggerCombo(const QString &id) {
     }
   }
   cb->setCurrentIndex(std::max(0, cb->findData(k->trigger)));
-  cb->setMinimumWidth(90);
-  cb->setMaximumWidth(160);
-  cb->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+  fitCombo(cb);
   cb->setToolTip("The gesture that runs it. Moving one here takes it off its other control.");
   connect(cb, &QComboBox::activated, this, [this, id, cb] { c_.setControlTrigger(id, cb->currentData().toString()); });
   return cb;
@@ -390,6 +406,7 @@ QComboBox *LibraryPanel::triggerCombo(const QString &id) {
 
 QWidget *LibraryPanel::addObsControl() {
   auto *cb = new QComboBox(list_);
+  fitCombo(cb);
   cb->addItem("+ Add a scene or hotkey...", QString());
   const auto &ctl = c_.gestures().controls;
   for (const auto &sc : c_.obsScenes())
@@ -410,20 +427,15 @@ QWidget *LibraryPanel::addObsControl() {
 QWidget *LibraryPanel::signRow(bool confirm) {
   auto *row = new Row(list_);
   row->setCursor(Qt::ArrowCursor);
-  auto *h = new QHBoxLayout(row);
-  h->setContentsMargins(7, 5, 7, 5);
-  h->setSpacing(8);
-  auto *t = new QVBoxLayout;
-  t->setSpacing(0);
-  t->addWidget(elided(confirm ? "Confirm sign" : "Stop sign", row));
-  t->addWidget(elided(confirm ? "the other hand's yes, for controls that ask for it"
-                              : "held 1 s: ends what's running and puts the framing back",
-                      row, true));
-  h->addLayout(t, 1);
+  auto *v = new QVBoxLayout(row);
+  v->setContentsMargins(7, 5, 7, 6);
+  v->setSpacing(3);
+  v->addWidget(elided(confirm ? "Confirm sign" : "Stop sign", row));
+  v->addWidget(note(confirm ? "the other hand's yes, for controls that ask for it"
+                            : "held 1 s: ends what's running and puts the whole picture back",
+                    row));
   auto *cb = new QComboBox(row);
-  cb->setMinimumWidth(90);
-  cb->setMaximumWidth(160);
-  cb->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+  fitCombo(cb);
   Settings &s = c_.settings();
   if (confirm) {
     auto *model = qobject_cast<QStandardItemModel *>(cb->model());
@@ -450,7 +462,7 @@ QWidget *LibraryPanel::signRow(bool confirm) {
       c_.settingsEdited();
     });
   }
-  h->addWidget(cb);
+  v->addWidget(cb);
   return row;
 }
 

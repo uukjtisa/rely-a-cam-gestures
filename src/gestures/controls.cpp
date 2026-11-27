@@ -15,7 +15,7 @@ using G = ControlGroup;
 // (Thumb_Up) and the stop sign (both palms) are never used here.
 const std::vector<ControlSpec> kSpecs = {
     {"pinch.zoom", G::Framing, "Pinch zoom",
-     "pinch and hold still, then push toward the camera to zoom in or pull back to zoom out; let go and pinch again to keep going",
+     "pinch and pull back to zoom out, or push toward the camera to zoom in; let go and pinch again to keep going",
      nullptr, true, false, Ends::Held, 0, "zoom.hold", false},
     {"zoom.box", G::Framing, "Pinch box", "pinch with both hands at once: the box between them fills the picture", nullptr,
      true, false, Ends::Held, 0, "", false},

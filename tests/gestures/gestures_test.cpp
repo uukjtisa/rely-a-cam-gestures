@@ -1,6 +1,7 @@
 // itsgiving's port, the matcher and the engine's rules.
 #include "../check.hpp"
 
+#include "framing/framer.hpp"
 #include "gestures/engine.hpp"
 #include "gestures/itsgiving.hpp"
 #include "gestures/library.hpp"
@@ -79,7 +80,66 @@ Observation withHands(std::vector<vision::Hand> hs) {
   return o;
 }
 
+// A pinching hand whose palm is `size` px (wrist to middle knuckle) at `at`.
+vision::Hand pinchHand(Vec2 at, float size) {
+  vision::Hand h;
+  h.lm[0] = {at.x, at.y + size};
+  h.lm[9] = {at.x, at.y};
+  h.lm[5] = {at.x - size * 0.4f, at.y};
+  h.lm[17] = {at.x + size * 0.4f, at.y};
+  h.lm[4] = h.lm[8] = {at.x, at.y - size * 0.6f};
+  h.world[9] = {0, -0.09f, 0};
+  h.world[8] = {0, -0.13f, 0};   // the index reaches out of the palm: a pinch, not a fist
+  return h;
+}
+
+struct FramerRun {
+  framing::Framer f;
+  double t = 0;
+  void feed(const std::vector<vision::Hand> &hs, int frames) {
+    for (int i = 0; i < frames; ++i) {
+      t += 1 / 15.0;
+      f.update(withHands(hs), t);
+    }
+  }
+  // Pinch, move from one size to another, settle, let go.
+  void pull(float from, float to) {
+    const int steps = 8;
+    for (int k = 0; k <= steps; ++k) feed({pinchHand({320, 180}, from + (to - from) * k / steps)}, 1);
+    feed({pinchHand({320, 180}, to)}, 6);
+    feed({}, 4);
+  }
+  double zoom() const { return 1.0 / f.target().height(); }
+};
+
 }  // namespace
+
+TEST(framer_pinch_pulls_zoom_in_and_back_out) {
+  FramerRun r;
+  r.pull(60, 90);   // pinch and push toward the camera
+  const double in = r.zoom();
+  CHECK_MSG(in > 1.8, std::to_string(in));
+  r.feed({}, 10);
+  CHECK(std::abs(r.zoom() - in) < 1e-6);   // let go: it stays
+  r.pull(90, 70);   // pinch and pull back: out a bit
+  const double mid = r.zoom();
+  CHECK_MSG(mid < in - 0.3, std::to_string(mid));
+  r.pull(90, 50);   // and again, hand over hand: the whole picture
+  CHECK_MSG(r.zoom() < 1.01, std::to_string(r.zoom()));
+  r.feed({pinchHand({320, 180}, 60)}, 20);   // a steady pinch doesn't creep
+  CHECK(r.zoom() < 1.01);
+}
+
+TEST(framer_follow_with_no_face_leaves_the_pinch_to_the_zoom) {
+  FramerRun r;
+  r.f.setFollow(true);   // on, but no face in the picture
+  const double span = r.f.followSpan();
+  r.pull(60, 90);
+  CHECK_MSG(r.zoom() > 1.8, std::to_string(r.zoom()));
+  CHECK(r.f.followSpan() == span);
+  r.f.reset();
+  CHECK(r.zoom() == 1.0);
+}
 
 TEST(itsgiving_open_mouth_threshold_is_score_one) {
   Baseline generic;

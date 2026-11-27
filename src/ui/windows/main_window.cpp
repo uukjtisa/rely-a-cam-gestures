@@ -17,6 +17,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QActionGroup>
+#include <QCoreApplication>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
@@ -171,7 +172,12 @@ QWidget *MainWindow::buildLeft() {
   underLeft_->setObjectName("under");
   underRight_ = new QLabel(left);
   underRight_->setObjectName("under");
+  resetZoom_ = new QPushButton("Reset zoom", left);
+  resetZoom_->setToolTip("The whole picture again, follow face off (the stop sign does the same)");
+  resetZoom_->hide();
+  connect(resetZoom_, &QPushButton::clicked, this, [this] { c_.resetFraming(); });
   under->addWidget(underLeft_, 1);
+  under->addWidget(resetZoom_);
   under->addWidget(underRight_);
   v->addLayout(under);
   v->addStretch(1);
@@ -283,8 +289,24 @@ void MainWindow::refreshUnder() {
   if (!extra.isEmpty()) t += ", plus " + extra.join(" and ") + " (preview only)";
   t += ".";
   if (underLeft_->text() != t) underLeft_->setText(t);
+  if (resetZoom_->isVisible() != c_.zoomed()) resetZoom_->setVisible(c_.zoomed());
   const QString r = c_.detectorInfo();
   if (underRight_->text() != r) underRight_->setText(r);
+}
+
+void MainWindow::shoot(const QString &dir) {
+  QDir().mkpath(dir);
+  showLibrary();
+  const char *names[] = {"controls", "reactions", "memes"};
+  for (int t = 0; t < 3; ++t) {
+    library_->showTab(t);
+    for (int i = 0; i < 4; ++i) {
+      QCoreApplication::processEvents();
+      // Outside the event loop, rows the rebuild let go of are never deleted: do it, or they paint.
+      QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    }
+    grab().save(QDir(dir).filePath(QString("shot-%1.png").arg(names[t])));
+  }
 }
 
 void MainWindow::moreMenu() {

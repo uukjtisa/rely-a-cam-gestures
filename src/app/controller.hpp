@@ -134,6 +134,8 @@ class Controller : public QObject {
   void addControl(const QString &id);
   void removeControl(const QString &id);
   const output::DetectionState &detection() const { return cur().det; }
+  bool zoomed() const;      // the shown camera's framing isn't the whole picture
+  void resetFraming();      // the whole picture again, follow off (as the stop sign does)
   int importItsgiving(const QString &folder, bool downloaded = false);
   QString takePicture(const QString &file) const;   // full path of a take's picture
   void toast(const QString &text);

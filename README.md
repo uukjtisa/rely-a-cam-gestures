@@ -7,8 +7,8 @@ to your phone cameras.
 - **Gestures:** itsgiving's 14 face and body reactions, Google's 7 hand signs, and your own
   (record 3 takes, test them live, check them for misfires). A confirm sign with your other hand
   and a stop sign keep them from firing by accident.
-- **Controls:** a fixed list, one gesture per job. Pinch zoom (pinch and hold still, push toward
-  the camera to zoom in, pull back to zoom out), a box between two pinches, zoom on what you hold,
+- **Controls:** a fixed list, one gesture per job. Pinch zoom (pinch and pull back to zoom out, or
+  push toward the camera to zoom in; let go and pinch again to keep going), a box between two pinches, zoom on what you hold,
   follow your face (hold its gesture and pinch with the other hand to set how close), camera off,
   snapshot, OBS scenes, recording, streaming and hotkeys, and the phone's torch, mic and camera
   when attached to Rely-A-Cam. Controls that read the same move switch each other off.
@@ -16,7 +16,8 @@ to your phone cameras.
   in their spot, with their sound to your speakers or into calls (through VB-Cable). itsgiving's
   14 pictures are downloaded from its repository on first start and put on its reactions.
 - **See what it sees:** the detection overlay (hands, holds) and a face map with the face gesture
-  you're making, in the preview or the output.
+  you're making, in the preview or the output. Reset zoom under the preview puts the whole
+  picture back.
 - **Outputs on its own:** its own Windows 11 virtual camera, "Rely-A-Cam Gestures", and OBS
   Virtual Camera. Inside Rely-A-Cam it draws on the phone's source in OBS instead.
 

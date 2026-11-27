@@ -49,6 +49,20 @@ int main(int argc, char *argv[]) {
   QApplication::setQuitOnLastWindowClosed(false);   // the tray keeps it running while an output is on
   racg::ui::keepMenusOpenOnToggle(&app);
 
+  // Dev: --shot DIR renders the window off screen, one picture per side tab, and quits. It reads the
+  // library and settings but never starts a camera, the link or a save.
+  if (const qsizetype i = QApplication::arguments().indexOf("--shot"); i > 0 && i + 1 < QApplication::arguments().size()) {
+    QApplication::setStyle(QStyleFactory::create("Fusion"));
+    app.setStyleSheet(racg::ui::theme::styleSheet());
+    racg::app::Controller controller;
+    racg::ui::MainWindow window(controller);
+    window.setAttribute(Qt::WA_DontShowOnScreen);
+    window.resize(1356, 733);
+    window.show();
+    window.shoot(QApplication::arguments().at(i + 1));
+    TerminateProcess(GetCurrentProcess(), 0);   // no shutdown work: nothing was started
+  }
+
   const QString name = instanceName();
   if (alreadyRunning(name)) return 0;
   QLocalServer::removeServer(name);   // a stale one from a crash

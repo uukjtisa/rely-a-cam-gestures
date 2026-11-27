@@ -62,6 +62,16 @@ Controller::~Controller() { shutdown(); }
 
 double Controller::now() const { return clock::now(); }
 
+bool Controller::zoomed() const {
+  const QRectF t = cur().framer.target();
+  return t.width() < 0.98 || t.height() < 0.98;
+}
+
+void Controller::resetFraming() {
+  cur().framer.reset();
+  toast("The whole picture again");
+}
+
 Channel &Controller::addChannel(const QString &key, const QString &name, bool phone) {
   auto ch = std::make_unique<Channel>(gestures_);
   Channel &c = *ch;

@@ -28,6 +28,7 @@ class MainWindow : public QMainWindow {
  public:
   explicit MainWindow(app::Controller &c, QWidget *parent = nullptr);
   void showAndRaise();
+  void shoot(const QString &dir);   // dev: a picture of the window per side tab (--shot DIR)
   void quit();
 
  protected:
@@ -50,6 +51,7 @@ class MainWindow : public QMainWindow {
   Chip *phoneChip_ = nullptr, *outputs_ = nullptr, *obs_ = nullptr, *rec_ = nullptr;
   QPushButton *undo_ = nullptr, *more_ = nullptr;
   QLabel *banner_ = nullptr, *underLeft_ = nullptr, *underRight_ = nullptr;
+  QPushButton *resetZoom_ = nullptr;
   Preview *preview_ = nullptr;
   QStackedWidget *side_ = nullptr;
   LibraryPanel *library_ = nullptr;

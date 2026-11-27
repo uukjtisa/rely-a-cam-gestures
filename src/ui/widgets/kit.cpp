@@ -19,6 +19,7 @@ Switch::Switch(const QString &text, QWidget *parent) : QAbstractButton(parent) {
   setCheckable(true);
   setText(text);
   setCursor(Qt::PointingHandCursor);
+  setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);   // never squeezed under a neighbour
 }
 
 QSize Switch::sizeHint() const {
