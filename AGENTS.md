@@ -6,9 +6,9 @@
 |---|---|
 | `src/app` | `main.cpp`, the `Controller` (one `Channel` per camera: the webcam, and each attached phone) |
 | `src/vision` | camera input (Media Foundation, DirectShow through FFmpeg), the ONNX models, the `Detector` thread |
-| `src/gestures` | the gesture library, itsgiving's reactions, Google's signs, your own, the engine, recorder and tester |
+| `src/gestures` | the gesture library, itsgiving's reactions, Google's signs, your own, the controls, the engine, recorder and tester |
 | `src/actions` | the action registry, filtered by situation (on its own / with OBS / inside Rely-A-Cam) |
-| `src/framing` | zoom presets, pinch box, hold, follow face: the crop |
+| `src/framing` | zoom presets, pinch zoom, pinch box, hold, follow face: the crop |
 | `src/memes` | the meme library, media decoding (`Media`), and `Show` (what's on screen now) |
 | `src/audio` | meme sound: the mixer (speakers, calls through VB-Cable, or the link) |
 | `src/obs` | the OBS WebSocket v5 client (on its own) |
@@ -30,6 +30,12 @@
   `src/gestures/link.cpp` (in Rely-A-Cam) together, and bump the version on a breaking change.
 - **The camera DLL stays dependency-free**: static CRT, no Qt, no FFmpeg. It runs inside a
   Windows service.
+- **Control jobs live in `gestures/controls.cpp`** (the catalogue). A gesture's action is written
+  from the controls (`Controls::apply`), so set a control's gesture there, never `action`
+  directly. Reactions only show memes. Controls that read the same move declare `conflicts`.
+- **A pinching hand is framing**, not a sign (`vision::isPinch`).
+- **Menus stay open on a tick or pick** (`ui::keepMenusOpenOnToggle`): rebuild a panel after its
+  menu closes, not from inside it.
 - **Colours come from `ui/theme.cpp`**; on the picture, from `output/overlay.cpp`. The dock and
   the phone copy the overlay's colours, so change all three together.
 - Commit messages: `type(scope): Imperative summary`, then why, what, and what was verified.
