@@ -4,6 +4,7 @@
 #include "common/log.hpp"
 #include "common/paths.hpp"
 #include "ui/theme.hpp"
+#include "ui/widgets/kit.hpp"
 #include "ui/windows/main_window.hpp"
 
 #include <QApplication>
@@ -46,6 +47,7 @@ int main(int argc, char *argv[]) {
   QApplication::setApplicationVersion(RACG_VERSION);
   QApplication::setOrganizationName("Niccc2007");
   QApplication::setQuitOnLastWindowClosed(false);   // the tray keeps it running while an output is on
+  racg::ui::keepMenusOpenOnToggle(&app);
 
   const QString name = instanceName();
   if (alreadyRunning(name)) return 0;

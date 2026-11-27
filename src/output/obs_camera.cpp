@@ -1,6 +1,7 @@
 #include "output/obs_camera.hpp"
 
 #include <windows.h>
+#include <tlhelp32.h>
 
 extern "C" {
 #include <libswscale/swscale.h>
@@ -27,6 +28,19 @@ struct QueueHeader {
 };
 
 uint32_t align32(uint32_t v) { return (v + 31) & ~31u; }
+
+// OBS makes the queue itself when its Start Virtual Camera is pressed, and refuses if the name
+// already exists. So while OBS is open we never hold it: OBS's own button must always work.
+bool obsRunning() {
+  HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if (snap == INVALID_HANDLE_VALUE) return false;
+  PROCESSENTRY32W e{sizeof(e)};
+  bool found = false;
+  for (BOOL ok = Process32FirstW(snap, &e); ok && !found; ok = Process32NextW(snap, &e))
+    found = _wcsicmp(e.szExeFile, L"obs64.exe") == 0;
+  CloseHandle(snap);
+  return found;
+}
 
 }  // namespace
 
@@ -98,6 +112,15 @@ void ObsCameraSink::send(const QImage &frame, qint64 timeMs) {
   std::lock_guard l(mu_);
   const int w = frame.width() & ~1, h = frame.height() & ~1;
   if (w < 2 || h < 2) return;
+  if (timeMs >= obsCheckAt_) {
+    obsCheckAt_ = timeMs + 2000;
+    obsOpen_ = obsRunning();
+  }
+  if (obsOpen_) {
+    close();
+    error_ = "OBS is open, so OBS Virtual Camera stays OBS's own";
+    return;
+  }
   if (!view_ || w != w_ || h != h_) {
     if (timeMs < retryAt_) return;
     if (!open(w, h)) {

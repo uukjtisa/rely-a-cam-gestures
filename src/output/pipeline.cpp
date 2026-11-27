@@ -18,7 +18,7 @@ Mapping FrameInfo::fromObs() const {
 
 void Pipeline::process(const QImage &full, qint64 t) {
   DetectionState det;
-  bool gridOut, detOut, off, mirror;
+  bool gridOut, detOut, faceOut, off, mirror;
   QImage offPic;
   std::function<QRectF(qint64)> cropFn;
   std::function<void(QPainter &, const FrameInfo &, const DetectionState &, qint64)> memes;
@@ -28,6 +28,7 @@ void Pipeline::process(const QImage &full, qint64 t) {
     det = det_;
     gridOut = gridOut_;
     detOut = detOut_;
+    faceOut = faceOut_;
     off = off_;
     mirror = mirror_;
     offPic = offPicture_;
@@ -67,11 +68,11 @@ void Pipeline::process(const QImage &full, qint64 t) {
     memes(p, info, det, t);
   }
   QImage cleanFrame = out;
-  if (gridOut || (detOut && !off)) {
+  if (gridOut || ((detOut || faceOut) && !off)) {
     out.detach();
     QPainter p(&out);
     if (gridOut) drawGrid(p, QRectF(out.rect()));
-    if (detOut && !off) drawDetection(p, det, info.fromObs(), out.height() / 360.f);
+    if ((detOut || faceOut) && !off) drawDetection(p, det, info.fromObs(), out.height() / 360.f, detOut, faceOut);
   }
   for (const auto &s : sinks) s->send(out, t);
   {
@@ -85,7 +86,7 @@ void Pipeline::process(const QImage &full, qint64 t) {
 
 QImage Pipeline::layer(QSize size, qint64 t, QRectF *crop, bool *any) {
   DetectionState det;
-  bool gridOut, detOut, off;
+  bool gridOut, detOut, faceOut, off;
   QImage offPic;
   std::function<QRectF(qint64)> cropFn;
   std::function<void(QPainter &, const FrameInfo &, const DetectionState &, qint64)> memes;
@@ -94,6 +95,7 @@ QImage Pipeline::layer(QSize size, qint64 t, QRectF *crop, bool *any) {
     det = det_;
     gridOut = gridOut_;
     detOut = detOut_;
+    faceOut = faceOut_;
     off = off_;
     offPic = offPicture_;
     cropFn = crop_;
@@ -126,8 +128,8 @@ QImage Pipeline::layer(QSize size, qint64 t, QRectF *crop, bool *any) {
       drawGrid(p, QRectF(out.rect()));
       drew = true;
     }
-    if (detOut && !off && det.obs) {
-      drawDetection(p, det, info.fromObs(), out.height() / 360.f);
+    if ((detOut || faceOut) && !off && det.obs) {
+      drawDetection(p, det, info.fromObs(), out.height() / 360.f, detOut, faceOut);
       drew = true;
     }
   }
@@ -156,10 +158,11 @@ void Pipeline::setDetection(DetectionState s) {
   det_ = std::move(s);
 }
 
-void Pipeline::setOutputOverlays(bool grid, bool detection) {
+void Pipeline::setOutputOverlays(bool grid, bool detection, bool face) {
   std::lock_guard l(mu_);
   gridOut_ = grid;
   detOut_ = detection;
+  faceOut_ = face;
 }
 
 void Pipeline::setCameraOff(bool off, const QImage &picture) {

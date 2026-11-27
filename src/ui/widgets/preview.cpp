@@ -60,36 +60,18 @@ void Preview::paintEvent(QPaintEvent *) {
     p.drawImage(pic, img);
     // The preview's own overlays, unless the output already carries them.
     if (s.grid.preview && !s.grid.output) output::drawGrid(p, pic);
-    if (s.detection.preview && !s.detection.output && !c_.pipeline().cameraOff()) {
-      output::DetectionState ds;
-      // The controller hands the pipeline the state; the preview draws the same.
-      ds.obs = c_.observation();
-      for (const auto &[g, st] : c_.engine().visible()) {
-        output::DetectionState::Gesture v;
-        v.name = g->name;
-        v.armed = st.armed;
-        v.waiting = st.waitingConfirm;
-        v.confirmName = vision::signLabel(s.confirmSign);
-        v.anchor = ds.obs ? Vec2{ds.obs->width / 2.f, ds.obs->height * 0.6f} : Vec2{};
-        if (ds.obs) {
-          bool placed = false;
-          for (size_t i = 0; i < ds.obs->hands.size() && !placed; ++i)
-            if (st.hands & (1u << i)) {
-              v.anchor = ds.obs->hands[i].lm[9].xy();
-              placed = true;
-            }
-          if (!placed && ds.obs->face) v.anchor = ds.obs->face->lm[152].xy();
-        }
-        ds.gestures.push_back(v);
-      }
-      ds.stop = c_.engine().stopProgress();
+    const bool hands = s.detection.preview && !s.detection.output;
+    const bool face = s.faceMap.preview && !s.faceMap.output;
+    if ((hands || face) && !c_.pipeline().cameraOff()) {
+      // The same state the controller hands the pipeline: gestures, the pinch moves, the face map.
+      const output::DetectionState &ds = c_.detection();
       output::Mapping m = info.fromObs();
       const float k = float(pic.width() / std::max(1, img.width()));
       m.sx *= k;
       m.sy *= k;
       m.ox = m.ox * k + float(pic.left());
       m.oy = m.oy * k + float(pic.top());
-      output::drawDetection(p, ds, m, float(pic.height() / 360.0));
+      output::drawDetection(p, ds, m, float(pic.height() / 360.0), hands, face);
     }
   }
 

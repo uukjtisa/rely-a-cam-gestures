@@ -51,7 +51,7 @@ class Pipeline {
 
   // UI thread.
   void setDetection(DetectionState s);
-  void setOutputOverlays(bool grid, bool detection);
+  void setOutputOverlays(bool grid, bool detection, bool face);
   void setCameraOff(bool off, const QImage &picture);
   bool cameraOff() const;
   // The framing crop for a time, as fractions of the mirrored picture (M2's Framer).
@@ -66,7 +66,7 @@ class Pipeline {
  private:
   mutable std::mutex mu_;
   DetectionState det_;
-  bool gridOut_ = false, detOut_ = false, off_ = false, mirror_ = true;
+  bool gridOut_ = false, detOut_ = false, faceOut_ = false, off_ = false, mirror_ = true;
   QImage offPicture_, latest_, clean_;
   FrameInfo info_;
   std::function<QRectF(qint64)> crop_;

@@ -12,6 +12,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QActionGroup>
 #include <QMenu>
 #include <QPainter>
 #include <QPainterPath>
@@ -424,10 +425,26 @@ void EditorPanel::refreshTest() {
     result_->setText(QString("Move normally: talk, scratch, look around... %1 s").arg(qCeil(t.secondsLeft(c_.now()))));
 }
 
+// Menus stay open on a pick (kit.hpp), so the panel is rebuilt once the menu has closed.
+void EditorPanel::execMenu(QMenu &m, QPoint at) {
+  // One exclusive group per menu: these are pick-one lists, submenus included.
+  auto *one = new QActionGroup(&m);
+  std::function<void(QMenu *)> group = [&](QMenu *menu) {
+    for (QAction *a : menu->actions()) {
+      if (a->menu()) group(a->menu());
+      else if (a->isCheckable()) one->addAction(a);
+    }
+  };
+  group(&m);
+  dirty_ = false;
+  m.exec(at);
+  if (dirty_) QTimer::singleShot(0, this, &EditorPanel::build);
+}
+
 void EditorPanel::actionMenu(QPoint at) {
   QMenu m(this);
   fillActionMenu(m);
-  m.exec(at);
+  execMenu(m, at);
 }
 
 void EditorPanel::fillActionMenu(QMenu &m) {
@@ -445,14 +462,19 @@ void EditorPanel::fillActionMenu(QMenu &m) {
       if (actions::defaultConfirm(action) && !x->usesBothHands()) x->confirm = true;
     }
     c_.gesturesEdited();
-    QTimer::singleShot(0, this, &EditorPanel::build);
+    dirty_ = true;
   };
+  if (const auto *k = c_.gestures().controls.byTrigger(id)) {
+    addMenuNote(&m, "This gesture runs " + gestures::controlLabel(k->id) + ". Change it on the Controls tab.");
+    return;
+  }
   QAction *none = m.addAction("None", [pick] { pick({}); });
   none->setCheckable(true);
   none->setChecked(gd->action.isEmpty());
   const auto s = c_.situation();
   QStringList hidden;
   for (const auto &grp : actions::groups(s, c_.memes(), c_.obsScenes(), c_.obsHotkeys())) {
+    if (grp.name != "Meme") continue;   // every other job is a control (the Controls tab)
     if (!actions::available(grp.need, s)) {
       hidden << grp.name + " (" + actions::needText(grp.need) + ")";
       continue;
@@ -497,7 +519,7 @@ void EditorPanel::endsMenu(QPoint at) {
       if (secs) x->secs = secs;
     }
     c_.gesturesEdited();
-    QTimer::singleShot(0, this, &EditorPanel::build);
+    dirty_ = true;
   };
   QAction *a = m.addAction("While held (lingers ⅓ s) - itsgiving's way", [set] { set(Ends::Held, 0); });
   a->setCheckable(true);
@@ -511,7 +533,7 @@ void EditorPanel::endsMenu(QPoint at) {
     s->setCheckable(true);
     s->setChecked(gd->ends == Ends::After && gd->secs == n);
   }
-  m.exec(at);
+  execMenu(m, at);
 }
 
 void EditorPanel::holdMenu(QPoint at) {
@@ -523,12 +545,12 @@ void EditorPanel::holdMenu(QPoint at) {
     QAction *a = m.addAction(holdText(s), [this, id, s] {
       if (auto *x = c_.gestures().find(id)) x->hold = s;
       c_.gesturesEdited();
-      QTimer::singleShot(0, this, &EditorPanel::build);
+      dirty_ = true;
     });
     a->setCheckable(true);
     a->setChecked(std::abs(gd->hold - s) < 1e-3f);
   }
-  m.exec(at);
+  execMenu(m, at);
 }
 
 }  // namespace racg::ui

@@ -7,6 +7,7 @@
 #include <QImage>
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -36,6 +37,17 @@ struct Hand {
 constexpr int kBlendshapeCount = 52;
 const char *blendshapeName(int i);       // MediaPipe's order: "_neutral", "browDownLeft", ...
 int blendshapeIndex(const std::string &name);   // -1 if unknown
+
+// A pinch: thumb tip and index tip together (within `touch` hand sizes), with the index reaching
+// out of the palm. In a fist the two tips also meet, curled into it, so the reach (in the 3D
+// world landmarks, which don't foreshorten) tells them apart.
+inline bool isPinch(const Hand &h, float touch = 0.25f) {
+  const float size = dist(h.lm[0].xy(), h.lm[9].xy());   // wrist to middle knuckle
+  if (size <= 1 || dist(h.lm[4].xy(), h.lm[8].xy()) >= size * touch) return false;
+  auto far = [](Vec3 a, Vec3 b) { return std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z)); };
+  const float palm = far(h.world[9], h.world[0]);
+  return palm <= 0 || far(h.world[8], h.world[0]) > palm * 1.15f;
+}
 
 struct Face {
   std::array<Landmark, 478> lm{};

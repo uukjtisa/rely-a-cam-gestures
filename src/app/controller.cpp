@@ -2,6 +2,7 @@
 
 #include "common/clock.hpp"
 #include "common/paths.hpp"
+#include "memes/itsgiving_fetch.hpp"
 #include "output/obs_camera.hpp"
 #include "output/win_camera.hpp"
 
@@ -36,6 +37,7 @@ Controller::Controller() {
   settings_ = Settings::load(paths::settingsFile());
   gestures_ = gestures::Library::load(paths::gesturesFile());
   memes_ = memes::Library::load(paths::memesFile());
+  for (auto &m : memes_.memes) probeSound(m);   // memes added before videos were probed
   baseline_ = gestures::Baseline::load(paths::calibrationFile());
   addChannel(kWebcam, {}, false);
   applyEngineConfig();
@@ -68,7 +70,9 @@ Channel &Controller::addChannel(const QString &key, const QString &name, bool ph
   c.phone = phone;
   c.engine.setPaused(!settings_.gesturesOn);
   c.pipeline.setMirror(!phone);
-  c.pipeline.setOutputOverlays(settings_.grid.output, settings_.detection.output);
+  c.pipeline.setOutputOverlays(settings_.grid.output, settings_.detection.output, settings_.faceMap.output);
+  c.framer.setMoves(moves());
+  c.framer.setFollowSpan(settings_.followSpan);
   c.pipeline.setCropSource([&c](qint64 t) { return c.framer.crop(t / 1000.0); });
   c.pipeline.setMemeLayer([&c](QPainter &p, const output::FrameInfo &info, const output::DetectionState &det, qint64 t) {
     c.show.draw(p, info, det, t);
@@ -96,7 +100,7 @@ Channel &Controller::addChannel(const QString &key, const QString &name, bool ph
   deps.paused = [&c] { return c.engine.paused(); };
   deps.setPaused = [this](bool p) { setGesturesOn(!p); };
   deps.overlaysChanged = [this] {
-    for (auto &[k, ch] : channels_) ch->pipeline.setOutputOverlays(settings_.grid.output, settings_.detection.output);
+    for (auto &[k, ch] : channels_) ch->pipeline.setOutputOverlays(settings_.grid.output, settings_.detection.output, settings_.faceMap.output);
     settings_.save(paths::settingsFile());
     sendStatus();
     Q_EMIT statusChanged();
@@ -151,7 +155,20 @@ void Controller::start() {
   obsWs_.setTarget(settings_.obsPort, settings_.obsPassword);
   obsWs_.start();
   link_.listen();
-  openCamera();
+  if (!attachLaunch_) {
+    openCamera();
+  } else {
+    // Started by Rely-A-Cam: wait for it instead of grabbing the webcam (and its outputs) first.
+    QTimer::singleShot(kAttachWaitMs, this, [this] {
+      if (attached() || !started_) return;
+      if (!(windowVisible && windowVisible())) {
+        QCoreApplication::quit();
+        return;
+      }
+      openCamera();
+    });
+  }
+  if (!settings_.itsgivingFetched) fetchItsgiving();
 }
 
 void Controller::shutdown() {
@@ -236,18 +253,29 @@ void Controller::addHandlers(Channel &ch) {
   r.handle("zoom.in", zoomStep(+1));
   r.handle("zoom.out", zoomStep(-1));
 
-  auto framing = [c](void (framing::Framer::*set)(bool), const QString &label) {
-    return [c, set, label](const QString &) {
-      Done d;
-      (c->framer.*set)(true);
-      d.label = label;
-      d.end = [c, set] { (c->framer.*set)(false); };
+  // Follow face's gesture is a chord: while it's held a pinch zoom from the other hand sets how
+  // close follow is; letting go toggles follow only if nothing was set (framing/framer.hpp).
+  r.handle("follow.face", [c](const QString &) {
+    Done d;
+    c->framer.beginChord();
+    d.end = [c] { c->framer.endChord(); };
+    return d;
+  });
+  r.handle("obs.scene.next", [this, c](const QString &) {
+    Done d;
+    const QStringList scenes = obsScenes();
+    if (scenes.isEmpty()) {
+      d.ok = false;
+      d.label = "OBS has no scenes";
       return d;
-    };
-  };
-  r.handle("zoom.box", framing(&framing::Framer::setBox, "zoom to the box"));
-  r.handle("zoom.hold", framing(&framing::Framer::setHold, "zoom on what I hold"));
-  r.handle("follow.face", framing(&framing::Framer::setFollow, "follow face"));
+    }
+    const QString before = obsScene();
+    const QString next = scenes[(scenes.indexOf(before) + 1) % scenes.size()];
+    obsDo(*c, "obs.scene", next);
+    d.label = "scene " + next;
+    if (!before.isEmpty() && before != next) d.revert = [this, c, before] { obsDo(*c, "obs.scene", before); };
+    return d;
+  });
 
   // OBS: through the plugin when attached, its WebSocket on its own.
   r.handle("obs.scene", [this, c](const QString &scene) {
@@ -400,8 +428,10 @@ void Controller::applyOutputs() {
   // Never write into the camera being read: that's a picture of itself, forever.
   const bool obsLoop = cam.contains("OBS Virtual Camera", Qt::CaseInsensitive);
   const bool ownLoop = cam.contains(output::WinCameraSink::kName, Qt::CaseInsensitive);
-  const bool wantObs = started_ && settings_.outObsCamera && !obsLoop;
-  const bool wantWin = started_ && settings_.outVirtualCamera && !ownLoop;
+  // The outputs are the webcam's, on its own: attached, the phones go to OBS and the webcam is shut.
+  const bool alone = started_ && !attached();
+  const bool wantObs = alone && settings_.outObsCamera && !obsLoop;
+  const bool wantWin = alone && settings_.outVirtualCamera && !ownLoop;
   if (wantObs && !obsCam_) {
     obsCam_ = std::make_shared<output::ObsCameraSink>();
     w.pipeline.addSink(obsCam_);
@@ -416,7 +446,7 @@ void Controller::applyOutputs() {
     w.pipeline.removeSink(winCam_.get());
     winCam_.reset();
   }
-  if (obsLoop && settings_.outObsCamera) toast("Reading from OBS Virtual Camera, so this app doesn't also write to it");
+  if (alone && obsLoop && settings_.outObsCamera) toast("Reading from OBS Virtual Camera, so this app doesn't also write to it");
 }
 
 void Controller::applySound() {
@@ -554,6 +584,25 @@ void Controller::onObservation(Channel &ch, std::shared_ptr<const vision::Observ
     if (const auto *g = gestures_.find(tester_.gestureId())) tester_.add(*g, ch.engine.state(g->id), t);
   runCommands(ch, cmds);
   ch.framer.update(*obs, t);
+  // The stop sign also puts the framing back: the whole picture, follow off.
+  if (ch.engine.stopProgress() >= 1) {
+    if (!ch.stopped) ch.framer.reset();
+    ch.stopped = true;
+  } else {
+    ch.stopped = false;
+  }
+  if (ch.framer.takeSpanChanged()) {   // a pinch set how close follow is: every camera, saved
+    settings_.followSpan = ch.framer.followSpan();
+    for (auto &[k, other] : channels_)
+      if (other.get() != &ch) other->framer.setFollowSpan(settings_.followSpan);
+    if (!spanSave_) {
+      spanSave_ = true;
+      QTimer::singleShot(1500, this, [this] {
+        spanSave_ = false;
+        settings_.save(paths::settingsFile());
+      });
+    }
+  }
 
   // The detection overlay: what each visible gesture is doing, anchored on its hand or the face.
   output::DetectionState ds;
@@ -583,20 +632,85 @@ void Controller::onObservation(Channel &ch, std::shared_ptr<const vision::Observ
                               {"y", v.anchor.y / std::max(1, obs->height)}});
     ds.gestures.push_back(v);
   }
+  const double W = std::max(1, obs->width), H = std::max(1, obs->height);
+  auto label = [&](const output::DetectionState::Gesture &v) {
+    return QJsonObject{{"n", v.name},
+                       {"s", v.waiting ? "waiting" : v.armed >= 1 ? "armed" : ""},
+                       {"a", double(v.armed)},
+                       {"c", v.confirmName},
+                       {"x", v.anchor.x / W},
+                       {"y", v.anchor.y / H}};
+  };
+  // The pinch moves: a ring while a grab arms, then the zoom.
+  for (const auto &mk : ch.framer.marks()) {
+    output::DetectionState::Gesture v;
+    v.name = mk.text;
+    v.armed = mk.ring;
+    v.anchor = mk.at;
+    if (ch.phone) detG.append(label(v));
+    ds.gestures.push_back(v);
+  }
+  // The face map: the face's lines, and the face gesture you're making (the best face-only
+  // gesture, named with its match) unless it's already firing.
+  QJsonArray faceG;
+  if ((settings_.faceMap.preview || settings_.faceMap.output) && obs->face) {
+    ds.face = output::faceContours(*obs->face);
+    const gestures::GestureDef *best = nullptr;
+    float bestPct = 0;
+    for (const auto &g : gestures_.gestures) {
+      if (!g.on || !g.parts.face || g.parts.leftHand || g.parts.rightHand) continue;
+      const auto *st = ch.engine.state(g.id);
+      if (st && st->pct > bestPct) {
+        bestPct = st->pct;
+        best = &g;
+      }
+    }
+    bool firing = false;
+    for (const auto &v : ds.gestures) firing |= best && v.name == best->name;
+    if (best && bestPct >= 20 && !firing) {
+      output::DetectionState::Gesture v;
+      v.face = true;
+      v.name = QString("%1 %2%").arg(best->name).arg(int(std::min(bestPct, 100.f)));
+      v.armed = std::clamp(bestPct / float(std::max(1, best->sens)), 0.f, 1.f);
+      v.anchor = obs->face->lm[152].xy();
+      faceG.append(label(v));
+      ds.gestures.push_back(v);
+    }
+  }
+  ch.det = ds;
   ch.pipeline.setDetection(ds);
 
-  // Attached with the dock's detection overlay on: the hands and labels, as fractions.
-  if (ch.phone && attached() && settings_.detection.preview) {
-    QJsonArray hands;
-    for (const auto &h : obs->hands) {
-      QJsonArray pts;
-      for (const auto &p : h.lm) {
-        pts.append(double(p.x) / std::max(1, obs->width));
-        pts.append(double(p.y) / std::max(1, obs->height));
+  // Attached with the dock's detection overlay or face map on: what to draw, as fractions.
+  if (ch.phone && attached() && (settings_.detection.preview || settings_.faceMap.preview)) {
+    auto round3 = [](double v) { return std::round(v * 1000) / 1000; };
+    QJsonArray hands, g;
+    if (settings_.detection.preview) {
+      for (const auto &h : obs->hands) {
+        QJsonArray pts;
+        for (const auto &p : h.lm) {
+          pts.append(round3(p.x / W));
+          pts.append(round3(p.y / H));
+        }
+        hands.append(pts);
       }
-      hands.append(pts);
+      g = detG;
     }
-    link_.send(link::Msg::Det, {{"device", ch.key}, {"hands", hands}, {"g", detG}, {"stop", ds.stop}});
+    QJsonObject det{{"device", ch.key}, {"hands", hands}, {"stop", settings_.detection.preview ? ds.stop : 0.f}};
+    if (settings_.faceMap.preview) {
+      for (const auto &v : faceG) g.append(v);
+      QJsonArray lines;
+      for (const auto &l : ds.face) {
+        QJsonArray pts;
+        for (const Vec2 &v : l) {
+          pts.append(round3(v.x / W));
+          pts.append(round3(v.y / H));
+        }
+        lines.append(pts);
+      }
+      det["face"] = lines;
+    }
+    det["g"] = g;
+    link_.send(link::Msg::Det, det);
   }
   if (shown) Q_EMIT observed();
 }
@@ -622,6 +736,7 @@ void Controller::onAttached() {
   w.runner->endAll();
   w.show.stopAll();
   camera_.close();
+  applyOutputs();   // lets go of OBS Virtual Camera and our own camera
   applySound();
   layerTimer_->start();
   sendStatus();
@@ -650,6 +765,7 @@ void Controller::onDetached() {
     QCoreApplication::quit();
     return;
   }
+  applyOutputs();
   applySound();
   openCamera();
   toast("Rely-A-Cam let go: back on the webcam");
@@ -704,12 +820,17 @@ void Controller::onLinkMessage(link::Msg type, const QJsonObject &j) {
       if (j.contains("gestures")) setGesturesOn(j["gestures"].toBool());
       if (j.contains("overlay")) {
         const QJsonObject o = j["overlay"].toObject();
-        Settings::Places &p = o["which"].toString() == "grid" ? settings_.grid : settings_.detection;
+        const QString which = o["which"].toString();
+        Settings::Places &p = which == "grid" ? settings_.grid : which == "face" ? settings_.faceMap : settings_.detection;
         (o["place"].toString() == "output" ? p.output : p.preview) = o["on"].toBool();
         settingsEdited();
       }
       break;
     case link::Msg::LibSet: {
+      if (j.contains("control")) {
+        const QJsonObject k = j["control"].toObject();
+        setControlOn(k["id"].toString(), k["on"].toBool());
+      }
       if (j.contains("gesture")) {
         const QJsonObject g = j["gesture"].toObject();
         if (auto *def = gestures_.find(g["id"].toString())) {
@@ -768,7 +889,9 @@ void Controller::onUpload(const QString &name, const QByteArray &bytes) {
     return;
   }
   f.close();
-  const bool ok = memes_.add(file) != nullptr;
+  memes::Meme *added = memes_.add(file);
+  if (added) probeSound(*added);
+  const bool ok = added != nullptr;
   memesEdited();
   toast(ok ? "Added " + QFileInfo(name).fileName() + " from the phone" : QFileInfo(name).fileName() + " isn't a picture, GIF or video");
 }
@@ -778,7 +901,8 @@ void Controller::sendLayers() {
   for (auto &[k, chp] : channels_) {
     Channel &ch = *chp;
     if (!ch.phone) continue;
-    const bool needed = ch.show.any() || settings_.grid.output || (settings_.detection.output && ch.obs) ||
+    const bool needed = ch.show.any() || settings_.grid.output ||
+                        ((settings_.detection.output || settings_.faceMap.output) && ch.obs) ||
                         ch.pipeline.cameraOff();
     if (needed) {
       QRectF crop;
@@ -806,7 +930,9 @@ void Controller::sendStatus() {
               {"gestures", settings_.gesturesOn},
               {"overlay", QJsonObject{{"grid", QJsonObject{{"dock", settings_.grid.preview}, {"output", settings_.grid.output}}},
                                       {"detection", QJsonObject{{"dock", settings_.detection.preview},
-                                                                {"output", settings_.detection.output}}}}}});
+                                                                {"output", settings_.detection.output}}},
+                                      {"face", QJsonObject{{"dock", settings_.faceMap.preview},
+                                                           {"output", settings_.faceMap.output}}}}}});
 }
 
 void Controller::sendLibrary() {
@@ -814,11 +940,28 @@ void Controller::sendLibrary() {
   QJsonArray gs, ms;
   for (const auto &g : gestures_.gestures) {
     const auto inf = actions::info(g.action, actions::Situation::Rely, memes_);
-    gs.append(QJsonObject{{"id", g.id},
-                          {"name", g.name},
-                          {"on", g.on},
-                          {"mine", g.kind == gestures::Kind::Mine},
-                          {"action", g.action.isEmpty() ? QString() : inf.label}});
+    QJsonObject o{{"id", g.id},
+                  {"name", g.name},
+                  {"on", g.on},
+                  {"mine", g.kind == gestures::Kind::Mine},
+                  {"action", g.action.isEmpty() ? QString() : inf.label}};
+    if (const auto *k = gestures_.controls.byTrigger(g.id)) o["control"] = gestures::controlLabel(k->id);
+    gs.append(o);
+  }
+  // Controls, for the phone's Library sheet: on or off there; gestures are picked on the PC.
+  static const char *kGroup[] = {"Framing", "Camera and mic", "OBS", "Always"};
+  QJsonArray cs;
+  for (const auto &k : gestures_.controls.list) {
+    const auto *spec = gestures::controlSpec(k.id);
+    if (!spec) continue;
+    const auto *tg = gestures_.find(k.trigger);
+    cs.append(QJsonObject{{"id", k.id},
+                          {"label", gestures::controlLabel(k.id)},
+                          {"group", kGroup[int(spec->group)]},
+                          {"on", k.on},
+                          {"move", gestures::isMove(k.id)},
+                          {"how", spec->how},
+                          {"gesture", tg ? tg->icon + " " + tg->name : QString()}});
   }
   for (const auto &m : memes_.memes)
     ms.append(QJsonObject{{"id", m.id},
@@ -827,7 +970,7 @@ void Controller::sendLibrary() {
                           {"place", m.place == memes::Place::Head ? "head" : m.place == memes::Place::Full ? "full" : "spot"},
                           {"volume", m.volume},
                           {"sound", m.hasSound()}});
-  link_.send(link::Msg::Lib, {{"gestures", gs}, {"memes", ms}});
+  link_.send(link::Msg::Lib, {{"gestures", gs}, {"memes", ms}, {"controls", cs}});
 }
 
 void Controller::sendAction(const Channel &ch, const QString &id, const QString &arg) {
@@ -919,9 +1062,40 @@ void Controller::calibrate() {
 void Controller::undo() { cur().runner->undo(); }
 
 void Controller::gesturesEdited() {
+  gestures_.applyControls();
+  for (auto &[k, ch] : channels_) ch->framer.setMoves(moves());
   gestures_.save(paths::gesturesFile());
   Q_EMIT libraryChanged();
   sendLibrary();
+}
+
+framing::Framer::Moves Controller::moves() const {
+  const auto &k = gestures_.controls;
+  return {k.moveOn("pinch.zoom"), k.moveOn("zoom.box"), k.moveOn("zoom.hold")};
+}
+
+void Controller::setControlOn(const QString &id, bool on) {
+  const QString off = gestures_.controls.setOn(id, on);
+  if (id == "follow.face" && !on)
+    for (auto &[k, ch] : channels_) ch->framer.setFollow(false);
+  gesturesEdited();
+  if (!off.isEmpty())
+    toast(QString("%1 is on, so %2 is off: they read the same move").arg(gestures::controlLabel(id), off));
+}
+
+void Controller::setControlTrigger(const QString &id, const QString &gestureId) {
+  gestures_.controls.setTrigger(id, gestureId);
+  gesturesEdited();
+}
+
+void Controller::addControl(const QString &id) {
+  gestures_.controls.add(id);
+  gesturesEdited();
+}
+
+void Controller::removeControl(const QString &id) {
+  gestures_.controls.remove(id);
+  gesturesEdited();
 }
 
 void Controller::memesEdited() {
@@ -935,7 +1109,7 @@ void Controller::memesEdited() {
 void Controller::settingsEdited() {
   settings_.save(paths::settingsFile());
   applyEngineConfig();
-  for (auto &[k, ch] : channels_) ch->pipeline.setOutputOverlays(settings_.grid.output, settings_.detection.output);
+  for (auto &[k, ch] : channels_) ch->pipeline.setOutputOverlays(settings_.grid.output, settings_.detection.output, settings_.faceMap.output);
   applyOutputs();
   applySound();
   obsWs_.setTarget(settings_.obsPort, settings_.obsPassword);
@@ -945,13 +1119,17 @@ void Controller::settingsEdited() {
 
 void Controller::addMemes(const QStringList &files) {
   int added = 0;
-  for (const auto &f : files) added += memes_.add(f) != nullptr;
+  for (const auto &f : files)
+    if (memes::Meme *m = memes_.add(f)) {
+      probeSound(*m);
+      ++added;
+    }
   memesEdited();
   toast(added == files.size() ? QString("Added %1 meme%2").arg(added).arg(added == 1 ? "" : "s")
                               : QString("Added %1 of %2: the others aren't pictures, GIFs or videos").arg(added).arg(files.size()));
 }
 
-int Controller::importItsgiving(const QString &folder) {
+int Controller::importItsgiving(const QString &folder, bool downloaded) {
   const QStringList done = memes_.importItsgiving(folder);
   // Each reaction that has no action yet gets its own picture, so the 14 work like itsgiving.
   for (const QString &pose : done)
@@ -961,9 +1139,30 @@ int Controller::importItsgiving(const QString &folder) {
     }
   gestures_.save(paths::gesturesFile());
   memesEdited();
-  toast(done.isEmpty() ? QString("No itsgiving pictures found there. Pick your itsgiving folder (it has assets inside).")
-                       : QString("Copied %1 pictures from your itsgiving clone, matched by name").arg(done.size()));
+  if (downloaded)
+    toast(QString("Added itsgiving's %1 memes to its reactions").arg(done.size()));
+  else
+    toast(done.isEmpty() ? QString("No itsgiving pictures found there. Pick your itsgiving folder (it has assets inside).")
+                         : QString("Copied %1 pictures from your itsgiving clone, matched by name").arg(done.size()));
   return int(done.size());
+}
+
+void Controller::probeSound(memes::Meme &m) const {
+  if (m.kind == memes::Kind::Video && m.sound.isEmpty())
+    m.clipAudio = audio::hasAudio(QDir(paths::mediaDir()).filePath(m.file));
+}
+
+void Controller::fetchItsgiving() {
+  memes::fetchItsgiving(this, [this](std::shared_ptr<QTemporaryDir> folder, const QString &error) {
+    if (!folder) {
+      qWarning() << "itsgiving's pictures weren't downloaded (tried again next start):" << error;
+      return;
+    }
+    if (importItsgiving(folder->path(), true) > 0) {
+      settings_.itsgivingFetched = true;
+      settings_.save(paths::settingsFile());
+    }
+  });
 }
 
 }  // namespace racg::app

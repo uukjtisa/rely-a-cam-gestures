@@ -29,6 +29,8 @@ class ObsCameraSink : public Sink {
   uint32_t offsets_[3] = {};
   int w_ = 0, h_ = 0;
   qint64 retryAt_ = 0, startMs_ = -1;
+  qint64 obsCheckAt_ = 0;   // when to look for a running OBS again
+  bool obsOpen_ = false;
   SwsContext *sws_ = nullptr;
   QString error_;
 };

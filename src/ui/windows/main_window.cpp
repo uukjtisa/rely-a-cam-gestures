@@ -16,6 +16,7 @@
 #include <QFileDialog>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QActionGroup>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
@@ -121,8 +122,10 @@ QWidget *MainWindow::buildTools() {
   phoneChip_->setToolTip("The phone this window shows. Click to pick another phone with gestures on.");
   connect(phoneChip_, &Chip::clicked, this, [this] {
     QMenu m(this);
+    auto *one = new QActionGroup(&m);   // pick one; the menu stays open
     for (const auto &[dev, name] : c_.phones()) {
       QAction *a = m.addAction(name.isEmpty() ? dev : name);
+      one->addAction(a);
       a->setCheckable(true);
       a->setChecked(dev == c_.shownPhone());
       connect(a, &QAction::triggered, this, [this, d = dev] { c_.showPhone(d); });
@@ -275,6 +278,7 @@ void MainWindow::refreshUnder() {
   QStringList extra;
   if (s.grid.preview && !s.grid.output) extra << "the grid";
   if (s.detection.preview && !s.detection.output) extra << "the detection overlay";
+  if (s.faceMap.preview && !s.faceMap.output) extra << "the face map";
   QString t = "Preview shows what the output gets";
   if (!extra.isEmpty()) t += ", plus " + extra.join(" and ") + " (preview only)";
   t += ".";
@@ -299,6 +303,7 @@ void MainWindow::moreMenu() {
   };
   places(ov->addMenu("Grid"), &Settings::grid);
   places(ov->addMenu("Detection"), &Settings::detection);
+  places(ov->addMenu("Face map"), &Settings::faceMap);
   m.addAction("Calibrate neutral face...", this, [this] { c_.calibrate(); });
   m.addAction("Import from itsgiving folder...", this, [this] {
     const QString dir = QFileDialog::getExistingDirectory(this, "Your itsgiving folder (the one with assets inside)");

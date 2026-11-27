@@ -21,6 +21,7 @@
 #include <QScrollArea>
 #include <QSlider>
 #include <QStackedWidget>
+#include <QStandardItemModel>
 #include <QVBoxLayout>
 
 namespace racg::ui {
@@ -123,8 +124,8 @@ LibraryPanel::LibraryPanel(app::Controller &c, QWidget *parent) : QWidget(parent
   auto *th = new QHBoxLayout(tabs);
   th->setContentsMargins(0, 0, 0, 0);
   th->setSpacing(0);
-  const char *names[] = {"Gestures", "Memes"};
-  for (int i = 0; i < 2; ++i) {
+  const char *names[] = {"Controls", "Reactions", "Memes"};
+  for (int i = 0; i < 3; ++i) {
     tabBtn_[i] = new QPushButton(names[i], tabs);
     tabBtn_[i]->setObjectName("tab");
     tabBtn_[i]->setCheckable(true);
@@ -185,13 +186,13 @@ LibraryPanel::LibraryPanel(app::Controller &c, QWidget *parent) : QWidget(parent
   setTab(0);
 }
 
-bool LibraryPanel::memesTab() const { return tab_ == 1; }
+bool LibraryPanel::memesTab() const { return tab_ == Memes; }
 
 void LibraryPanel::setTab(int t) {
   tab_ = t;
-  for (int i = 0; i < 2; ++i) tabBtn_[i]->setChecked(i == t);
-  foot_->setCurrentIndex(t);
-  if (t == 0) Q_EMIT spotMeme({});
+  for (int i = 0; i < 3; ++i) tabBtn_[i]->setChecked(i == t);
+  foot_->setCurrentIndex(t == Memes ? 1 : 0);   // Controls and Reactions: + Record gesture
+  if (t != Memes) Q_EMIT spotMeme({});
   rebuild();
 }
 
@@ -201,7 +202,8 @@ void LibraryPanel::rebuild() {
     if (it->widget()) it->widget()->deleteLater();
     delete it;
   }
-  if (tab_ == 0) buildGestures();
+  if (tab_ == Controls) buildControls();
+  else if (tab_ == Reactions) buildGestures();
   else buildMemes();
   listLay_->addStretch(1);
   setUpdatesEnabled(true);
@@ -248,7 +250,10 @@ QWidget *LibraryPanel::gestureRow(const QString &id) {
   QString sub;
   bool needs = false;
   const auto s = c_.situation();
-  if (!g->action.isEmpty()) {
+  const auto *control = c_.gestures().controls.byTrigger(id);
+  if (control) {
+    sub = "runs " + gestures::controlLabel(control->id) + " (Controls tab)";
+  } else if (!g->action.isEmpty()) {
     const auto inf = actions::info(g->action, s, c_.memes());
     needs = !actions::available(inf.need, s);
     sub = "→ " + inf.label + (needs ? " (" + actions::needText(inf.need) + ")" : QString()) +
@@ -265,7 +270,8 @@ QWidget *LibraryPanel::gestureRow(const QString &id) {
 
   auto *sw = new Switch({}, row);
   sw->setChecked(g->on);
-  sw->setToolTip("On/off");
+  sw->setToolTip(control ? "Turned on and off with its control" : "On/off");
+  sw->setEnabled(!control);
   connect(sw, &Switch::toggled, this, [this, id](bool on) {
     if (auto *gg = c_.gestures().find(id)) gg->on = on;
     c_.gesturesEdited();
@@ -281,10 +287,179 @@ QWidget *LibraryPanel::gestureRow(const QString &id) {
   return row;
 }
 
+// ---- Controls ------------------------------------------------------------------------------------
+
+void LibraryPanel::buildControls() {
+  using gestures::ControlGroup;
+  const char *titles[] = {"Framing", "Camera and mic", "OBS", "Always"};
+  for (int gi = 0; gi < 4; ++gi) {
+    listLay_->addWidget(sectionTitle(titles[gi], list_));
+    for (const auto &k : c_.gestures().controls.list)
+      if (const auto *s = gestures::controlSpec(k.id); s && int(s->group) == gi) listLay_->addWidget(controlRow(k.id));
+    if (gi == int(ControlGroup::Obs)) listLay_->addWidget(addObsControl());
+    if (gi == int(ControlGroup::Always)) {
+      listLay_->addWidget(signRow(false));
+      listLay_->addWidget(signRow(true));
+    }
+  }
+  listLay_->addWidget(note("One gesture, one job: a gesture used here can't show a meme. + Record gesture makes your own "
+                           "to pick here.",
+                           list_));
+}
+
+QWidget *LibraryPanel::controlRow(const QString &id) {
+  const auto &ctl = c_.gestures().controls;
+  const gestures::Control *k = ctl.find(id);
+  const gestures::ControlSpec *s = gestures::controlSpec(id);
+  auto *row = new Row(list_);
+  row->setCursor(Qt::ArrowCursor);
+  auto *h = new QHBoxLayout(row);
+  h->setContentsMargins(7, 5, 7, 5);
+  h->setSpacing(8);
+
+  auto *t = new QVBoxLayout;
+  t->setSpacing(0);
+  t->addWidget(elided(gestures::controlLabel(id), row));
+  QString sub = s->how;
+  const auto sit = c_.situation();
+  const auto inf = actions::info(id, sit, c_.memes());
+  const bool needs = !gestures::isMove(id) && !actions::available(inf.need, sit);
+  if (needs) sub = actions::needText(inf.need) + (sub.isEmpty() ? QString() : " · " + sub);
+  if (!k->on && *s->conflicts && ctl.moveOn(s->conflicts))
+    sub = "off: it reads the same move as " + gestures::controlLabel(s->conflicts);
+  if (s->confirm)
+    sub += (sub.isEmpty() ? QString() : QString(" · ")) + "then " + vision::signLabel(c_.settings().confirmSign) +
+           " with the other hand";
+  if (!sub.isEmpty()) {
+    auto *subL = elided(sub, row, true);
+    subL->setToolTip(sub);
+    if (needs) subL->setProperty("need", true);
+    t->addWidget(subL);
+  }
+  h->addLayout(t, 1);
+
+  if (!gestures::isMove(id)) h->addWidget(triggerCombo(id));
+  if (s->addable) {
+    auto *x = new QPushButton("×", row);
+    x->setToolTip("Remove this control");
+    x->setFixedWidth(26);
+    connect(x, &QPushButton::clicked, this, [this, id] { c_.removeControl(id); });
+    h->addWidget(x);
+  }
+  auto *sw = new Switch({}, row);
+  sw->setChecked(k->on);
+  sw->setToolTip("On/off");
+  connect(sw, &Switch::toggled, this, [this, id](bool on) { c_.setControlOn(id, on); });
+  h->addWidget(sw);
+  if (!k->on) {
+    auto *fx = new QGraphicsOpacityEffect(row);
+    fx->setOpacity(0.55);
+    row->setGraphicsEffect(fx);
+  }
+  return row;
+}
+
+QComboBox *LibraryPanel::triggerCombo(const QString &id) {
+  const auto &lib = c_.gestures();
+  const gestures::Control *k = lib.controls.find(id);
+  auto *cb = new QComboBox(list_);
+  cb->addItem("No gesture", QString());
+  auto *model = qobject_cast<QStandardItemModel *>(cb->model());
+  const QString confirmId = QString("sign:") + vision::signId(c_.settings().confirmSign);
+  for (const auto &g : lib.gestures) {
+    // Google's signs and your own; itsgiving's face and body reactions show memes.
+    if (g.kind == gestures::Kind::Ready || g.id == confirmId) continue;
+    QString text = g.icon + " " + g.name;
+    const gestures::Control *other = lib.controls.byTrigger(g.id);
+    if (other && other->id != id) text += " (now " + gestures::controlLabel(other->id) + ")";
+    cb->addItem(text, g.id);
+    if (g.action.startsWith("meme:") && model) {
+      QStandardItem *it = model->item(cb->count() - 1);
+      it->setEnabled(false);
+      it->setToolTip("It shows a meme: take its meme off on the Reactions tab first");
+    }
+  }
+  cb->setCurrentIndex(std::max(0, cb->findData(k->trigger)));
+  cb->setMinimumWidth(90);
+  cb->setMaximumWidth(160);
+  cb->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+  cb->setToolTip("The gesture that runs it. Moving one here takes it off its other control.");
+  connect(cb, &QComboBox::activated, this, [this, id, cb] { c_.setControlTrigger(id, cb->currentData().toString()); });
+  return cb;
+}
+
+QWidget *LibraryPanel::addObsControl() {
+  auto *cb = new QComboBox(list_);
+  cb->addItem("+ Add a scene or hotkey...", QString());
+  const auto &ctl = c_.gestures().controls;
+  for (const auto &sc : c_.obsScenes())
+    if (!ctl.find("obs.scene|" + sc)) cb->addItem("Scene: " + sc, "obs.scene|" + sc);
+  for (const auto &hk : c_.obsHotkeys())
+    if (!ctl.find("obs.hotkey|" + hk)) cb->addItem("Hotkey: " + hk, "obs.hotkey|" + hk);
+  if (cb->count() == 1) {
+    cb->setItemText(0, "+ Add a scene or hotkey (OBS hasn't listed any)");
+    cb->setEnabled(false);
+  }
+  connect(cb, &QComboBox::activated, this, [this, cb] {
+    const QString id = cb->currentData().toString();
+    if (!id.isEmpty()) c_.addControl(id);
+  });
+  return cb;
+}
+
+QWidget *LibraryPanel::signRow(bool confirm) {
+  auto *row = new Row(list_);
+  row->setCursor(Qt::ArrowCursor);
+  auto *h = new QHBoxLayout(row);
+  h->setContentsMargins(7, 5, 7, 5);
+  h->setSpacing(8);
+  auto *t = new QVBoxLayout;
+  t->setSpacing(0);
+  t->addWidget(elided(confirm ? "Confirm sign" : "Stop sign", row));
+  t->addWidget(elided(confirm ? "the other hand's yes, for controls that ask for it"
+                              : "held 1 s: ends what's running and puts the framing back",
+                      row, true));
+  h->addLayout(t, 1);
+  auto *cb = new QComboBox(row);
+  cb->setMinimumWidth(90);
+  cb->setMaximumWidth(160);
+  cb->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+  Settings &s = c_.settings();
+  if (confirm) {
+    auto *model = qobject_cast<QStandardItemModel *>(cb->model());
+    for (const auto &g : c_.gestures().gestures) {
+      if (g.kind != gestures::Kind::Sign) continue;
+      QString text = g.icon + " " + g.name;
+      const gestures::Control *k = c_.gestures().controls.byTrigger(g.id);
+      if (k) text += " (runs " + gestures::controlLabel(k->id) + ")";
+      cb->addItem(text, g.ref);
+      if (k && model) model->item(cb->count() - 1)->setEnabled(false);
+    }
+    cb->setCurrentIndex(std::max(0, cb->findData(int(s.confirmSign))));
+    connect(cb, &QComboBox::activated, this, [this, cb] {
+      c_.settings().confirmSign = vision::Sign(cb->currentData().toInt());
+      c_.settingsEdited();
+      Q_EMIT c_.libraryChanged();
+    });
+  } else {
+    cb->addItem("Both palms open", int(gestures::StopSign::BothPalms));
+    cb->addItem("Crossed arms", int(gestures::StopSign::CrossedArms));
+    cb->setCurrentIndex(std::max(0, cb->findData(int(s.stopSign))));
+    connect(cb, &QComboBox::activated, this, [this, cb] {
+      c_.settings().stopSign = gestures::StopSign(cb->currentData().toInt());
+      c_.settingsEdited();
+    });
+  }
+  h->addWidget(cb);
+  return row;
+}
+
+// ---- Memes ---------------------------------------------------------------------------------------
+
 void LibraryPanel::buildMemes() {
   for (const auto &m : c_.memes().memes) listLay_->addWidget(memeRow(m.id));
   listLay_->addWidget(note("Pictures (PNG, JPG), GIFs and video (MP4, WebM, MOV; transparency kept). itsgiving's own "
-                           "pictures aren't shipped: Import copies them from your clone.",
+                           "pictures come from its GitHub on first start; Import takes them from your own clone instead.",
                            list_));
 }
 

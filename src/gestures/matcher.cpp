@@ -200,12 +200,14 @@ Match matchCustom(const std::vector<Take> &takes, const Parts &parts, const visi
   for (const auto &t : takes) {
     float score = 1e9f;
     unsigned hands = 0;
-    const bool want[2] = {parts.leftHand, parts.rightHand};
+    // A take asks only for the hands it has: "both hands" ticked over a left-hand take and a
+    // right-hand take means either hand, not both at once (no take holds both).
+    const bool want[2] = {parts.leftHand && t.hand[0].seen, parts.rightHand && t.hand[1].seen};
     for (int s = 0; s < 2 && score > 0; ++s) {
       if (!want[s]) continue;
       unsigned bit = 0;
       const vision::Hand *h = handOf(obs, s, &bit);
-      if (!h || !t.hand[s].seen) {
+      if (!h) {
         score = 0;
         break;
       }
@@ -255,6 +257,9 @@ Match matchCustom(const std::vector<Take> &takes, const Parts &parts, const visi
 Match matchSign(vision::Sign sign, const vision::Observation &obs) {
   Match best;
   for (size_t i = 0; i < obs.hands.size(); ++i) {
+    // A pinching hand is framing (pinch zoom, the box), not signing: it can read as a fist, and
+    // setting how close follow face is must not turn the camera off.
+    if (vision::isPinch(obs.hands[i])) continue;
     const float s = obs.hands[i].signs[int(sign)] / 0.5f;   // 60 % at Google's own 0.5
     if (s > best.score) best = {s, 1u << i};
   }

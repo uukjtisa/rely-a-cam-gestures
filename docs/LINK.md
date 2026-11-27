@@ -31,7 +31,7 @@ Payloads are JSON unless noted.
 | 0x03 | FRAME | plugin → app | `{"device","slot","seq","w","h","stride","outW","outH"}`: a picture is in the phone's in block; `outW`×`outH` is the source's size |
 | 0x04 | PHONE | plugin → app | `{"device","state":{"torch","muted","micOnly","front","zoom","hasTorch"}}` |
 | 0x05 | OBS | plugin → app | `{"scenes":[...],"scene","recording","streaming","hotkeys":[...]}` |
-| 0x06 | CMD | plugin → app | `{"openEditor":device}`, `{"gestures":bool}`, `{"overlay":{"which","place","on"}}` |
+| 0x06 | CMD | plugin → app | `{"openEditor":device}`, `{"gestures":bool}`, `{"overlay":{"which","place","on"}}` (`which`: `grid`, `detection`, `face`) |
 | 0x07 | LIBSET | plugin → app | an edit from a phone's Library screen, plus `"device"` (Rely-A-Cam PROTOCOL.md, GSET) |
 | 0x08 | UPLOAD | plugin → app | binary: `nameLength:u32  name  bytes`, a meme from a phone |
 | 0x0F | BYE | either | `{"reason":...}` |
@@ -39,12 +39,14 @@ Payloads are JSON unless noted.
 | 0x12 | ACTION | app → plugin | `{"device","id","arg"}` (below) |
 | 0x13 | EVENT | app → plugin | `{"device","gesture","name","op":"start"|"end"}` (logged) |
 | 0x14 | AUDIO | app → plugin | binary: 48 kHz stereo float, 10 ms blocks, only when not silent |
-| 0x15 | STATUS | app → plugin | `{"version","ready","device","error","gestures","overlay":{"grid":{"dock","output"},"detection":{"dock","output"}}}` |
-| 0x16 | DET | app → plugin | `{"device","hands":[[x0,y0,...]],"g":[{"n","s","a","c","x","y"}],"stop"}` while the detection overlay's dock place is on |
-| 0x17 | LIB | app → plugin | `{"gestures":[{"id","name","on","mine","action"}],"memes":[{"id","name","kind","place","volume","sound"}]}` |
+| 0x15 | STATUS | app → plugin | `{"version","ready","device","error","gestures","overlay":{"grid":{"dock","output"},"detection":{"dock","output"},"face":{"dock","output"}}}` |
+| 0x16 | DET | app → plugin | `{"device","hands":[[x0,y0,...]],"g":[{"n","s","a","c","x","y"}],"stop","face"}` while the detection overlay's or the face map's dock place is on |
+| 0x17 | LIB | app → plugin | `{"gestures":[{"id","name","on","mine","action","control"?}],"memes":[{"id","name","kind","place","volume","sound"}],"controls":[{"id","label","group","on","move","how","gesture"}]}` |
 
 DET points are fractions of the upright picture (21 per hand). In `g`, `s` is `""`, `"armed"` or
 `"waiting"` (for the confirm sign), `a` is the hold, 0 to 1, and `c` names the confirm sign.
+The pinch moves' rings and the face map's label are `g` entries too. `face` is a list of
+polylines (fractions), present while the face map is on.
 
 ## Shared memory
 

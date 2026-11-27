@@ -47,6 +47,8 @@ class EditorPanel : public QWidget {
   void actionMenu(QPoint at);
   void endsMenu(QPoint at);
   void holdMenu(QPoint at);
+  void execMenu(QMenu &m, QPoint at);
+  bool dirty_ = false;   // a menu pick changed the gesture
   gestures::GestureDef *g();
 
   app::Controller &c_;

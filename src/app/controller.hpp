@@ -64,6 +64,8 @@ struct Channel {
   QJsonObject state;         // torch, mic, micOnly, front, zoom... as the plugin last said
   bool layerEmpty = true;
   QRectF lastCrop{0, 0, 1, 1};
+  output::DetectionState det;   // what the detection overlay and face map show now
+  bool stopped = false;         // the stop sign has fired this hold
 };
 
 class Controller : public QObject {
@@ -126,7 +128,13 @@ class Controller : public QObject {
   void memesEdited();
   void settingsEdited();
   void addMemes(const QStringList &files);
-  int importItsgiving(const QString &folder);
+  // Controls (gestures/controls.hpp): a conflicting control is turned off, with a toast.
+  void setControlOn(const QString &id, bool on);
+  void setControlTrigger(const QString &id, const QString &gestureId);
+  void addControl(const QString &id);
+  void removeControl(const QString &id);
+  const output::DetectionState &detection() const { return cur().det; }
+  int importItsgiving(const QString &folder, bool downloaded = false);
   QString takePicture(const QString &file) const;   // full path of a take's picture
   void toast(const QString &text);
 
@@ -147,6 +155,10 @@ class Controller : public QObject {
   void startDetector(Channel &ch);
   void addHandlers(Channel &ch);
   void openCamera();
+  void fetchItsgiving();                 // itsgiving's pictures, once, from its GitHub
+  void probeSound(memes::Meme &m) const; // a video's own soundtrack
+  static constexpr int kAttachWaitMs = 5000;
+  framing::Framer::Moves moves() const;      // which pinch moves Controls has on   // --attach: how long to wait for Rely-A-Cam
   void onObservation(Channel &ch, std::shared_ptr<const vision::Observation> obs);
   void runCommands(Channel &ch, const std::vector<gestures::Command> &cmds);
   void applyEngineConfig();
@@ -181,7 +193,7 @@ class Controller : public QObject {
   QList<vision::CameraInfo> cameras_;
   QString cameraError_, device_, detectorError_;
   QImage still_;
-  bool started_ = false, attachLaunch_ = false;
+  bool started_ = false, attachLaunch_ = false, spanSave_ = false;
 
   link::Server link_;
   QTimer *layerTimer_ = nullptr;

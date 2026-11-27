@@ -75,8 +75,11 @@ Settings Settings::load(const QString &path) {
   s.stopSign = o["stop_sign"].toString() == "crossed_arms" ? gestures::StopSign::CrossedArms
                                                             : gestures::StopSign::BothPalms;
   s.startWithWindows = o["start_with_windows"].toBool(false);
+  s.itsgivingFetched = o["itsgiving_fetched"].toBool(false);
   s.grid = places(o["grid"], s.grid);
   s.detection = places(o["detection"], s.detection);
+  s.faceMap = places(o["face_map"], s.faceMap);
+  s.followSpan = o["follow_span"].toDouble(s.followSpan);
   s.obsPort = o["obs_port"].toInt(4455);
   s.obsPassword = unprotect(o["obs_password"].toString());
   return s;
@@ -95,8 +98,11 @@ bool Settings::save(const QString &path) const {
                 {"confirm_sign", vision::signId(confirmSign)},
                 {"stop_sign", stopSign == gestures::StopSign::CrossedArms ? "crossed_arms" : "both_palms"},
                 {"start_with_windows", startWithWindows},
+                {"itsgiving_fetched", itsgivingFetched},
                 {"grid", places(grid)},
                 {"detection", places(detection)},
+                {"face_map", places(faceMap)},
+                {"follow_span", followSpan},
                 {"obs_port", obsPort},
                 {"obs_password", protect(obsPassword)}};
   QSaveFile f(path);

@@ -165,34 +165,8 @@ SettingsDialog::SettingsDialog(app::Controller &c, QWidget *parent) : QDialog(pa
     }
   }
 
-  // ---- Signs ----
-  v->addWidget(h4("Signs", this));
-  {
-    auto *h = rowx();
-    h->addWidget(note("Confirm sign", this));
-    auto *conf = new QComboBox(this);
-    for (vision::Sign sg : {vision::Sign::ThumbUp, vision::Sign::ClosedFist, vision::Sign::OpenPalm, vision::Sign::ILoveYou})
-      conf->addItem(vision::signLabel(sg), int(sg));
-    conf->setCurrentIndex(std::max(0, conf->findData(int(s.confirmSign))));
-    connect(conf, &QComboBox::activated, this, [this, conf] {
-      c_.settings().confirmSign = vision::Sign(conf->currentData().toInt());
-      c_.settingsEdited();
-      Q_EMIT c_.libraryChanged();   // "your confirm sign" moves, the editor's confirm text changes
-    });
-    h->addWidget(conf);
-    h->addWidget(note("Stop sign", this));
-    auto *stop = new QComboBox(this);
-    stop->addItem("Both palms open, 1 s", int(gestures::StopSign::BothPalms));
-    stop->addItem("Crossed arms, 1 s", int(gestures::StopSign::CrossedArms));
-    stop->setCurrentIndex(std::max(0, stop->findData(int(s.stopSign))));
-    connect(stop, &QComboBox::activated, this, [this, stop] {
-      c_.settings().stopSign = gestures::StopSign(stop->currentData().toInt());
-      c_.settingsEdited();
-    });
-    h->addWidget(stop);
-    h->addStretch(1);
-    v->addLayout(h);
-  }
+  // ---- Face ---- (the confirm and stop signs are on the Controls tab)
+  v->addWidget(h4("Face", this));
   {
     auto *h = rowx();
     auto *cal = new QPushButton("Calibrate neutral face (7 s)...", this);

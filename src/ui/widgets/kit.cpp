@@ -2,6 +2,7 @@
 
 #include "ui/theme.hpp"
 
+#include <QKeyEvent>
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
@@ -194,6 +195,33 @@ void addMenuHeader(QMenu *m, const QString &text) {
   a->setEnabled(false);
   m->addAction(a);
 }
+
+namespace {
+class KeepOpen : public QObject {
+ public:
+  using QObject::QObject;
+
+ protected:
+  bool eventFilter(QObject *o, QEvent *e) override {
+    auto *menu = qobject_cast<QMenu *>(o);
+    if (!menu) return false;
+    const bool click = e->type() == QEvent::MouseButtonRelease &&
+                       static_cast<QMouseEvent *>(e)->button() == Qt::LeftButton;
+    const bool key = e->type() == QEvent::KeyPress &&
+                     (static_cast<QKeyEvent *>(e)->key() == Qt::Key_Return ||
+                      static_cast<QKeyEvent *>(e)->key() == Qt::Key_Enter ||
+                      static_cast<QKeyEvent *>(e)->key() == Qt::Key_Space);
+    if (!click && !key) return false;
+    QAction *a = menu->activeAction();
+    if (!a || !a->isCheckable() || !a->isEnabled() || a->menu()) return false;
+    if (click && !menu->actionGeometry(a).contains(static_cast<QMouseEvent *>(e)->position().toPoint())) return false;
+    a->trigger();
+    return true;
+  }
+};
+}  // namespace
+
+void keepMenusOpenOnToggle(QObject *app) { app->installEventFilter(new KeepOpen(app)); }
 
 void addMenuNote(QMenu *m, const QString &text) {
   auto *a = new QWidgetAction(m);

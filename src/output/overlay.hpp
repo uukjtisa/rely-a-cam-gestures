@@ -25,10 +25,15 @@ struct DetectionState {
     bool waiting = false;     // amber: waiting for the confirm sign
     QString confirmName;      // "Thumbs up"
     Vec2 anchor;              // analysed-frame pixels
+    bool face = false;        // the face map's label (the face gesture you're making), not a gesture's
   };
   std::vector<Gesture> gestures;
   float stop = 0;             // the stop sign's progress, 0..1
+  std::vector<std::vector<Vec2>> face;   // the face map's contours (analysed-frame pixels), when on
 };
+
+// The face map's lines: jaw, brows, eyes, lips and the nose's bridge, plus the irises.
+std::vector<std::vector<Vec2>> faceContours(const vision::Face &f);
 
 // Analysed-frame pixels -> target pixels.
 struct Mapping {
@@ -37,7 +42,9 @@ struct Mapping {
 };
 
 void drawGrid(QPainter &p, const QRectF &r);
-void drawDetection(QPainter &p, const DetectionState &s, const Mapping &m, float scale);
+// hands: skeletons, gesture labels, the stop ring. face: the face map and its label.
+void drawDetection(QPainter &p, const DetectionState &s, const Mapping &m, float scale, bool hands = true,
+                   bool face = false);
 void drawRing(QPainter &p, QPointF centre, float frac, bool amber, float scale);
 
 }  // namespace racg::output

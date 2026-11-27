@@ -107,5 +107,9 @@ QLabel *note(const QString &text, QWidget *parent = nullptr);
 // Menu pieces the stylesheet can't make: a small header, and a wrapped note.
 void addMenuHeader(QMenu *m, const QString &text);
 void addMenuNote(QMenu *m, const QString &text);
+// Ticking a checkable menu item keeps its menu open, so several toggles in a submenu don't each
+// mean opening it again. Plain items (they open or do something) still close it. Installed on
+// the application: every menu in the app behaves the same.
+void keepMenusOpenOnToggle(QObject *app);
 
 }  // namespace racg::ui

@@ -40,6 +40,7 @@ std::vector<Group> groups(Situation s, const memes::Library &memes, const QStrin
   g.push_back({"OBS",
                Need::Obs,
                {{"obs.scene", "Switch scene", scenes},
+                {"obs.scene.next", "Next scene", {}},
                 {"obs.record", "Start/stop recording", {}},
                 {"obs.stream", "Start/stop streaming", {}},
                 {"obs.hotkey", "Any OBS hotkey", hotkeys}}});
@@ -53,7 +54,7 @@ QString memeId(const QString &id) { return id.mid(5); }
 
 bool isOneShot(const QString &id) {
   const QString base = id.section('|', 0, 0);
-  return base == "zoom.in" || base == "zoom.out" || base == "snapshot" || base == "obs.scene" ||
+  return base == "zoom.in" || base == "zoom.out" || base == "snapshot" || base == "obs.scene" || base == "obs.scene.next" ||
          base == "obs.hotkey" || base == "gestures.pause" || base == "gestures.undo";
 }
 

@@ -23,11 +23,13 @@ struct Settings {
   vision::Sign confirmSign = vision::Sign::ThumbUp;
   gestures::StopSign stopSign = gestures::StopSign::BothPalms;
   bool startWithWindows = false;
+  bool itsgivingFetched = false; // itsgiving's 14 pictures were downloaded once (retried until then)
 
   struct Places {
     bool preview = false, output = false;
   };
-  Places grid{false, false}, detection{true, false};
+  Places grid{false, false}, detection{true, false}, faceMap{false, false};
+  double followSpan = 1.8;      // follow face: face heights per picture height (smaller = closer)
 
   int obsPort = 4455;
   QString obsPassword;           // kept encrypted for this Windows user (DPAPI) in the file

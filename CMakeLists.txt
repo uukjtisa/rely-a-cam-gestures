@@ -27,6 +27,7 @@ add_library(racg_core STATIC
   src/common/log.cpp
   src/common/paths.cpp
   src/common/settings.cpp
+  src/gestures/controls.cpp
   src/gestures/engine.cpp
   src/gestures/itsgiving.cpp
   src/gestures/library.cpp
@@ -34,6 +35,7 @@ add_library(racg_core STATIC
   src/gestures/sessions.cpp
   src/framing/framer.cpp
   src/link/server.cpp
+  src/memes/itsgiving_fetch.cpp
   src/memes/library.cpp
   src/memes/media.cpp
   src/memes/show.cpp

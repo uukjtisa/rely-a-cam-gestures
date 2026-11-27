@@ -55,9 +55,12 @@ Name: "obscam"; Description: "OBS Virtual Camera (needs OBS installed; OBS doesn
 Name: "desktopicon"; Description: "A desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
 
 [Files]
-Source: "{#Stage}\*"; Excludes: "{#CameraDll}"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#Stage}\*"; Excludes: "{#CameraDll},Rely-A-Cam-Gestures.exe"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; Frame Server keeps the camera DLL loaded while an app watches the camera: replaced at restart if so.
 Source: "{#Stage}\{#CameraDll}"; DestDir: "{app}"; Flags: ignoreversion regserver restartreplace uninsrestartdelete
+; The exe goes in last: Rely-A-Cam's plugin starts it as soon as it exists, and a started app
+; locks its DLLs, so every DLL must already be in place.
+Source: "{#Stage}\Rely-A-Cam-Gestures.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Registry]
 Root: HKLM; Subkey: "{#AppKey}"; ValueType: string; ValueName: "InstallPath"; ValueData: "{app}"; Flags: uninsdeletekey
@@ -80,4 +83,29 @@ var
 begin
   GetWindowsVersionEx(V);
   Result := (V.Major > 10) or ((V.Major = 10) and (V.Build >= 22000));
+end;
+
+// Rely-A-Cam's plugin starts the helper again the moment it quits, so closing it alone loses the
+// race and Setup finds its files in use. A running exe can still be renamed: with no exe at its
+// path there is nothing to restart, then the process is ended. The plugin's next retry (within
+// 20 s) starts the new version.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Exe: String;
+  Code: Integer;
+begin
+  Result := '';
+  Exe := ExpandConstant('{app}\Rely-A-Cam-Gestures.exe');
+  DeleteFile(Exe + '.old');
+  if FileExists(Exe) then
+    RenameFile(Exe, Exe + '.old');
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM Rely-A-Cam-Gestures.exe', '', SW_HIDE,
+       ewWaitUntilTerminated, Code);
+  Sleep(800);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    DeleteFile(ExpandConstant('{app}\Rely-A-Cam-Gestures.exe.old'));
 end;

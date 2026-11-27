@@ -77,6 +77,8 @@ Library Library::defaults() {
     g.parts = {true, true, false, false};
     l.gestures.push_back(g);
   }
+  l.controls = Controls::defaults();
+  l.applyControls();
   return l;
 }
 
@@ -118,7 +120,7 @@ QJsonObject Library::toJson() const {
     }
     a.append(o);
   }
-  return {{"version", kVersion}, {"gestures", a}};
+  return {{"version", kVersion}, {"gestures", a}, {"controls", controls.toJson()}};
 }
 
 Library Library::fromJson(const QJsonObject &root) {
@@ -149,6 +151,8 @@ Library Library::fromJson(const QJsonObject &root) {
     g->sens = std::clamp(o["sensitivity"].toInt(kSensDefault), kSensMin, kSensMax);
     g->hold = std::clamp(float(o["hold"].toDouble(g->hold)), 0.03f, 5.f);
   }
+  l.controls = Controls::fromJson(root["controls"], l.gestures);
+  l.applyControls();
   return l;
 }
 
