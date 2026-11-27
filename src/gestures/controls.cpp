@@ -1,4 +1,5 @@
 #include "gestures/controls.hpp"
+#include "gestures/itsgiving.hpp"
 
 #include <QJsonObject>
 
@@ -47,6 +48,9 @@ const std::vector<ControlSpec> kSpecs = {
 };
 
 bool isMeme(const QString &action) { return action.startsWith("meme:"); }
+
+// A gesture's own hold, before any control raises it.
+float ownHold(const GestureDef &g) { return g.kind == Kind::Ready ? reactionArmSeconds(g.reaction()) : 0.3f; }
 
 GestureDef *gestureById(std::vector<GestureDef> &gs, const QString &id) {
   for (auto &g : gs)
@@ -185,13 +189,22 @@ void Controls::remove(const QString &id) {
 }
 
 void Controls::apply(std::vector<GestureDef> &gestures) const {
-  for (auto &g : gestures)
-    if (!g.action.isEmpty() && !isMeme(g.action)) g.action.clear();
+  for (auto &g : gestures) {
+    if (g.action.isEmpty() || isMeme(g.action) || byTrigger(g.id)) continue;
+    // Its control moved away: nothing of that job stays, or a meme put here later would wait for
+    // the job's confirm sign, keep its timing, or be switched off.
+    g.action.clear();
+    g.on = true;
+    g.ends = Ends::Held;
+    g.confirm = false;
+    g.hold = ownHold(g);
+  }
   for (const auto &k : list) {
     const ControlSpec *s = controlSpec(k.id);
     if (!s || !s->trigger || k.trigger.isEmpty()) continue;
     GestureDef *g = gestureById(gestures, k.trigger);
     if (!g) continue;
+    if (g->action != k.id) g->hold = ownHold(*g);   // newly given this job
     g->action = k.id;
     g->on = k.on;
     g->ends = s->ends;

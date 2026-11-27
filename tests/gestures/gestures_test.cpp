@@ -61,6 +61,8 @@ vision::Hand signHand(Sign s, float p, bool left, Vec2 at) {
 
 Library signLibrary() {
   Library l = Library::defaults();
+  l.controls.list.clear();   // plain gestures: no control holds a sign
+  l.applyControls();
   for (auto &g : l.gestures) g.on = false;
   auto *v = l.find("sign:Victory");
   v->on = true;
@@ -292,6 +294,20 @@ TEST(engine_one_shot_fires_every_time) {
   run(false, 8);
   run(true, 4);
   CHECK(starts == 2);
+}
+
+TEST(controls_a_released_gesture_is_plain_again) {
+  Library l = Library::defaults();
+  const auto *v = l.find("sign:Victory");
+  CHECK(v->action == "obs.record" && v->confirm && v->ends == Ends::Again);
+  l.controls.setTrigger("obs.record", "sign:ILoveYou");
+  l.applyControls();
+  v = l.find("sign:Victory");
+  CHECK(v->action.isEmpty() && !v->confirm && v->ends == Ends::Held && v->on);
+  CHECK(l.find("sign:ILoveYou")->action == "obs.record" && l.find("sign:ILoveYou")->confirm);
+  // The two pinches that read the same move switch each other off.
+  CHECK(!l.controls.setOn("zoom.hold", true).isEmpty());
+  CHECK(!l.controls.moveOn("pinch.zoom") && l.controls.moveOn("zoom.hold"));
 }
 
 TEST(library_round_trips_settings_and_takes) {
